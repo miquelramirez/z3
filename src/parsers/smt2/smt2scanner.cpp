@@ -16,14 +16,14 @@ Author:
 Revision History:
 
 --*/
-#include"smt2scanner.h"
-#include"parser_params.hpp"
+#include "parsers/smt2/smt2scanner.h"
+#include "parsers/util/parser_params.hpp"
 
 namespace smt2 {
 
     void scanner::next() {
         if (m_cache_input)
-            m_cache.push_back(m_curr);                
+            m_cache.push_back(m_curr);
         SASSERT(!m_at_eof);
         if (m_interactive) {
             m_curr = m_stream.get();
@@ -92,7 +92,7 @@ namespace smt2 {
     }
 
     scanner::token scanner::read_symbol_core() {
-        while (true) {
+        while (!m_at_eof) {
             char c = curr();
             signed char n = m_normalized[static_cast<unsigned char>(c)];
             if (n == 'a' || n == '0' || n == '-') {
@@ -106,6 +106,7 @@ namespace smt2 {
                 return SYMBOL_TOKEN;
             }
         }
+        return EOF_TOKEN;
     }
 
     scanner::token scanner::read_symbol() {
@@ -123,7 +124,7 @@ namespace smt2 {
         next();
         bool is_float = false;
 
-        while (true) {
+        while (!m_at_eof) {
             char c = curr();
             if ('0' <= c && c <= '9') {
                 m_number = rational(10)*m_number + rational(c - '0');
@@ -292,11 +293,11 @@ namespace smt2 {
     }
 
     scanner::token scanner::scan() {
-        while (true) {            
+        while (true) {
             signed char c = curr();
             m_pos = m_spos;
 
-            if (m_at_eof)                
+            if (m_at_eof)
                 return EOF_TOKEN;
 
             switch (m_normalized[(unsigned char) c]) {

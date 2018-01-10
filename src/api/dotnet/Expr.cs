@@ -98,7 +98,7 @@ namespace Microsoft.Z3
             Contract.Requires(args != null);
             Contract.Requires(Contract.ForAll(args, a => a != null));
 
-            Context.CheckContextMatch(args);
+            Context.CheckContextMatch<Expr>(args);
             if (IsApp && args.Length != NumArgs)
                 throw new Z3Exception("Number of arguments does not match");
             NativeObject = Native.Z3_update_term(Context.nCtx, NativeObject, (uint)args.Length, Expr.ArrayToNative(args));
@@ -120,8 +120,8 @@ namespace Microsoft.Z3
             Contract.Requires(Contract.ForAll(to, t => t != null));
             Contract.Ensures(Contract.Result<Expr>() != null);
 
-            Context.CheckContextMatch(from);
-            Context.CheckContextMatch(to);
+            Context.CheckContextMatch<Expr>(from);
+            Context.CheckContextMatch<Expr>(to);
             if (from.Length != to.Length)
                 throw new Z3Exception("Argument sizes do not match");
             return Expr.Create(Context, Native.Z3_substitute(Context.nCtx, NativeObject, (uint)from.Length, Expr.ArrayToNative(from), Expr.ArrayToNative(to)));
@@ -152,7 +152,7 @@ namespace Microsoft.Z3
             Contract.Requires(Contract.ForAll(to, t => t != null));
             Contract.Ensures(Contract.Result<Expr>() != null);
 
-            Context.CheckContextMatch(to);
+            Context.CheckContextMatch<Expr>(to);
             return Expr.Create(Context, Native.Z3_substitute_vars(Context.nCtx, NativeObject, (uint)to.Length, Expr.ArrayToNative(to)));
         }
 
@@ -163,13 +163,7 @@ namespace Microsoft.Z3
         /// <returns>A copy of the term which is associated with <paramref name="ctx"/></returns>
         new public Expr Translate(Context ctx)
         {
-            Contract.Requires(ctx != null);
-            Contract.Ensures(Contract.Result<Expr>() != null);
-
-            if (ReferenceEquals(Context, ctx))
-                return this;
-            else
-                return Expr.Create(ctx, Native.Z3_translate(Context.nCtx, NativeObject, ctx.nCtx));
+            return (Expr)base.Translate(ctx);
         }
 
         /// <summary>
@@ -797,6 +791,77 @@ namespace Microsoft.Z3
         public bool IsLabelLit { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_LABEL_LIT; } }
         #endregion
 
+        #region Sequences and Strings
+
+        /// <summary>
+        /// Check whether expression is a string constant.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsString  { get { return IsApp && 0 != Native.Z3_is_string(Context.nCtx, NativeObject); } }
+
+        /// <summary>
+        /// Retrieve string corresponding to string constant.
+        /// </summary>
+        /// <remarks>the expression should be a string constant, (IsString should be true).</remarks>
+        public string String { get { return Native.Z3_get_string(Context.nCtx, NativeObject); } }
+
+        /// <summary>
+        /// Check whether expression is a concatentation.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsConcat { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_CONCAT; } }
+
+        /// <summary>
+        /// Check whether expression is a prefix.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsPrefix { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_PREFIX; } }
+
+        /// <summary>
+        /// Check whether expression is a suffix.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsSuffix { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_SUFFIX; } }
+
+        /// <summary>
+        /// Check whether expression is a contains.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsContains { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_CONTAINS; } }
+
+        /// <summary>
+        /// Check whether expression is an extract.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsExtract { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_EXTRACT; } }
+
+        /// <summary>
+        /// Check whether expression is a replace.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsReplace { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_REPLACE; } }
+
+        /// <summary>
+        /// Check whether expression is an at.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsAt { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_AT; } }
+
+        /// <summary>
+        /// Check whether expression is a sequence length.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsLength { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_LENGTH; } }
+
+        /// <summary>
+        /// Check whether expression is a sequence index.
+        /// </summary>
+        /// <returns>a Boolean</returns>
+        public bool IsIndex { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_SEQ_INDEX; } }
+
+
+        #endregion
+
         #region Proof Terms
         /// <summary>
         /// Indicates whether the term is a binary equivalence modulo namings.
@@ -894,7 +959,7 @@ namespace Microsoft.Z3
         /// Tn: (R t_n s_n)
         /// [monotonicity T1 ... Tn]: (R (f t_1 ... t_n) (f s_1 ... s_n))
         /// Remark: if t_i == s_i, then the antecedent Ti is suppressed.
-        /// That is, reflexivity proofs are supressed to save space.
+        /// That is, reflexivity proofs are suppressed to save space.
         /// </remarks>
         public bool IsProofMonotonicity { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_PR_MONOTONICITY; } }
 
@@ -937,7 +1002,7 @@ namespace Microsoft.Z3
         public bool IsProofAndElimination { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_PR_AND_ELIM; } }
 
         /// <summary>
-        /// Indicates whether the term is a proof by eliminiation of not-or
+        /// Indicates whether the term is a proof by elimination of not-or
         /// </summary>
         /// <remarks>
         /// Given a proof for (not (or l_1 ... l_n)), produces a proof for (not l_i).
@@ -1047,7 +1112,7 @@ namespace Microsoft.Z3
         public bool IsProofQuantInst { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_PR_QUANT_INST; } }
 
         /// <summary>
-        /// Indicates whether the term is a hypthesis marker.
+        /// Indicates whether the term is a hypothesis marker.
         /// </summary>
         /// <remarks>Mark a hypothesis in a natural deduction style proof.</remarks>
         public bool IsProofHypothesis { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_PR_HYPOTHESIS; } }
@@ -1368,7 +1433,7 @@ namespace Microsoft.Z3
         /// <remarks>
         /// Filter (restrict) a relation with respect to a predicate.
         /// The first argument is a relation.
-        /// The second argument is a predicate with free de-Brujin indices
+        /// The second argument is a predicate with free de-Bruijn indices
         /// corresponding to the columns of the relation.
         /// So the first column in the relation has index 0.
         /// </remarks>
@@ -1584,7 +1649,7 @@ namespace Microsoft.Z3
         public bool IsFPMul { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_FPA_MUL; } }
 
         /// <summary>
-        /// Indicates whether the term is a floating-point divison term
+        /// Indicates whether the term is a floating-point division term
         /// </summary>
         public bool IsFPDiv { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_FPA_DIV; } }
 
@@ -1644,7 +1709,7 @@ namespace Microsoft.Z3
         public bool IsFPLe { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_FPA_LE; } }
 
         /// <summary>
-        /// Indicates whether the term is a floating-point greater-than or erqual term
+        /// Indicates whether the term is a floating-point greater-than or equal term
         /// </summary>
         public bool IsFPGe { get { return IsApp && FuncDecl.DeclKind == Z3_decl_kind.Z3_OP_FPA_GE; } }
 
@@ -1724,7 +1789,7 @@ namespace Microsoft.Z3
 
         #region Bound Variables
         /// <summary>
-        /// The de-Burijn index of a bound variable.
+        /// The de-Bruijn index of a bound variable.
         /// </summary>
         /// <remarks>
         /// Bound variables are indexed by de-Bruijn indices. It is perhaps easiest to explain

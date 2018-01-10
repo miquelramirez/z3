@@ -19,17 +19,17 @@ Notes:
 #ifndef FPA2BV_CONVERTER_H_
 #define FPA2BV_CONVERTER_H_
 
-#include"ast.h"
-#include"obj_hashtable.h"
-#include"ref_util.h"
-#include"fpa_decl_plugin.h"
-#include"bv_decl_plugin.h"
-#include"array_decl_plugin.h"
-#include"datatype_decl_plugin.h"
-#include"dl_decl_plugin.h"
-#include"pb_decl_plugin.h"
-#include"seq_decl_plugin.h"
-#include"basic_simplifier_plugin.h"
+#include "ast/ast.h"
+#include "util/obj_hashtable.h"
+#include "util/ref_util.h"
+#include "ast/fpa_decl_plugin.h"
+#include "ast/bv_decl_plugin.h"
+#include "ast/array_decl_plugin.h"
+#include "ast/datatype_decl_plugin.h"
+#include "ast/dl_decl_plugin.h"
+#include "ast/pb_decl_plugin.h"
+#include "ast/seq_decl_plugin.h"
+#include "ast/rewriter/bool_rewriter.h"
 
 class fpa2bv_converter {
 public:
@@ -39,11 +39,10 @@ public:
 
 protected:
     ast_manager              & m;
-    basic_simplifier_plugin    m_simp;
+    bool_rewriter              m_simp;
     fpa_util                   m_util;
     bv_util                    m_bv_util;
     arith_util                 m_arith_util;
-    array_util                 m_array_util;
     datatype_util              m_dt_util;
     seq_util                   m_seq_util;
     mpf_manager              & m_mpf_manager;
@@ -54,9 +53,10 @@ protected:
     const2bv_t                 m_const2bv;
     const2bv_t                 m_rm_const2bv;
     uf2bvuf_t                  m_uf2bvuf;
-    special_t                  m_min_max_specials;
+    special_t                  m_min_max_ufs;
 
     friend class fpa2bv_model_converter;
+    friend class bv2fpa_converter;
 
 public:
     fpa2bv_converter(ast_manager & m);
@@ -71,11 +71,12 @@ public:
     bool is_rm(expr * e) { return is_app(e) && m_util.is_rm(e); }
     bool is_rm(sort * s) { return m_util.is_rm(s); }
     bool is_float_family(func_decl * f) { return f->get_family_id() == m_util.get_family_id(); }
-    
+
     void mk_fp(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
-    
+
     void split_fp(expr * e, expr * & sgn, expr * & exp, expr * & sig) const;
     void split_fp(expr * e, expr_ref & sgn, expr_ref & exp, expr_ref & sig) const;
+    void join_fp(expr * e, expr_ref & res);
 
     void mk_eq(expr * a, expr * b, expr_ref & result);
     void mk_ite(expr * c, expr * t, expr * f, expr_ref & result);
@@ -86,7 +87,7 @@ public:
     void mk_numeral(sort * s, mpf const & v, expr_ref & result);
     virtual void mk_const(func_decl * f, expr_ref & result);
     virtual void mk_rm_const(func_decl * f, expr_ref & result);
-    virtual void mk_function(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
+    virtual void mk_uf(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
     void mk_var(unsigned base_inx, sort * srt, expr_ref & result);
 
     void mk_pinf(func_decl * f, expr_ref & result);
@@ -133,33 +134,28 @@ public:
     void mk_to_fp_signed(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
     void mk_to_fp_unsigned(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
     void mk_to_ieee_bv(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
+    void mk_to_ieee_bv_unspecified(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
     void mk_to_fp_real(func_decl * f, sort * s, expr * rm, expr * x, expr_ref & result);
     void mk_to_fp_real_int(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
 
     void mk_to_ubv(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
     void mk_to_sbv(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
+    void mk_to_bv_unspecified(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
     void mk_to_real(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
+    void mk_to_real_unspecified(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
 
     void set_unspecified_fp_hi(bool v) { m_hi_fp_unspecified = v; }
 
     void mk_min(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
-    void mk_min_i(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
-    virtual expr_ref mk_min_max_unspecified(func_decl * f, expr * x, expr * y);
-
     void mk_max(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
-    void mk_max_i(func_decl * f, unsigned num, expr * const * args, expr_ref & result);
-
-    expr_ref mk_to_ubv_unspecified(unsigned ebits, unsigned sbits, unsigned width);
-    expr_ref mk_to_sbv_unspecified(unsigned ebits, unsigned sbits, unsigned width);
-    expr_ref mk_to_real_unspecified(unsigned ebits, unsigned sbits);
-    expr_ref mk_to_ieee_bv_unspecified(unsigned ebits, unsigned sbits);
+    expr_ref mk_min_max_unspecified(func_decl * f, expr * x, expr * y);
 
     void reset(void);
 
     void dbg_decouple(const char * prefix, expr_ref & e);
     expr_ref_vector m_extra_assertions;
-    
-    special_t const & get_min_max_specials() const { return m_min_max_specials; };
+
+    special_t const & get_min_max_specials() const { return m_min_max_ufs; };
     const2bv_t const & get_const2bv() const { return m_const2bv; };
     const2bv_t const & get_rm_const2bv() const { return m_rm_const2bv; };
     uf2bvuf_t const & get_uf2bvuf() const { return m_uf2bvuf; };
@@ -203,12 +199,6 @@ protected:
 
     void mk_to_bv(func_decl * f, unsigned num, expr * const * args, bool is_signed, expr_ref & result);
 
-    sort_ref replace_float_sorts(sort * s);
-    func_decl_ref replace_function(func_decl * f);
-    expr_ref replace_float_arg(expr * a);
-    void mk_function_output(sort * rng, func_decl * fbv, expr * const * new_args, expr_ref & result);
-    func_decl * get_bv_uf(func_decl * f, sort * bv_rng, unsigned arity);
-
 private:
     void mk_nan(sort * s, expr_ref & result);
     void mk_nzero(sort * s, expr_ref & result);
@@ -227,6 +217,8 @@ private:
     void mk_round_to_integral(sort * s, expr_ref & rm, expr_ref & x, expr_ref & result);
 
     void mk_to_fp_float(sort * s, expr * rm, expr * x, expr_ref & result);
+
+    func_decl * mk_bv_uf(func_decl * f, sort * const * domain, sort * range);
 };
 
 #endif

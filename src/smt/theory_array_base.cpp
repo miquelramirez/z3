@@ -16,13 +16,13 @@ Author:
 Revision History:
 
 --*/
-#include"smt_context.h"
-#include"theory_array_base.h"
-#include"ast_ll_pp.h"
-#include"ast_pp.h"
-#include"smt_model_generator.h"
-#include"func_interp.h"
-#include"ast_smt2_pp.h"
+#include "smt/smt_context.h"
+#include "smt/theory_array_base.h"
+#include "ast/ast_ll_pp.h"
+#include "ast/ast_pp.h"
+#include "smt/smt_model_generator.h"
+#include "model/func_interp.h"
+#include "ast/ast_smt2_pp.h"
 
 namespace smt {
 
@@ -33,7 +33,7 @@ namespace smt {
     }
 
     void theory_array_base::found_unsupported_op(expr * n) {
-        TRACE("theory_array_unsup", tout << mk_ll_pp(n, get_manager()) << "\n";);
+        TRACE("array", tout << mk_ll_pp(n, get_manager()) << "\n";);
         if (!m_found_unsupported_op) {
             get_context().push_trail(value_trail<context, bool>(m_found_unsupported_op));
             m_found_unsupported_op = true;
@@ -210,17 +210,15 @@ namespace smt {
 
 
 
-
     func_decl_ref_vector * theory_array_base::register_sort(sort * s_array) {
         unsigned dimension = get_dimension(s_array);
         func_decl_ref_vector * ext_skolems = 0;
         if (!m_sort2skolem.find(s_array, ext_skolems)) {       
+            array_util util(get_manager());
             ast_manager & m = get_manager();
             ext_skolems = alloc(func_decl_ref_vector, m);
             for (unsigned i = 0; i < dimension; ++i) {
-                sort * ext_sk_domain[2] = { s_array, s_array };
-                parameter p(i);
-                func_decl * ext_sk_decl = m.mk_func_decl(get_id(), OP_ARRAY_EXT, 1, &p, 2, ext_sk_domain);
+                func_decl * ext_sk_decl = util.mk_array_ext(s_array, i);
                 ext_skolems->push_back(ext_sk_decl);
             }
             m_sort2skolem.insert(s_array, ext_skolems);
@@ -426,19 +424,19 @@ namespace smt {
         ptr_buffer<enode> to_unmark;
         unsigned num_vars = get_num_vars();
         for (unsigned i = 0; i < num_vars; i++) {
-	    enode * n = get_enode(i);
+        enode * n = get_enode(i);
             if (ctx.is_relevant(n)) {
-	        enode * r = n->get_root();
-		if (!r->is_marked()){
-		    if(is_array_sort(r) && ctx.is_shared(r)) {
-		      TRACE("array_shared", tout << "new shared var: #" << r->get_owner_id() << "\n";);
-		      theory_var r_th_var = r->get_th_var(get_id());
-		      SASSERT(r_th_var != null_theory_var);
-		      result.push_back(r_th_var);
-		    }
-		    r->set_mark();
-		    to_unmark.push_back(r);
-		}
+            enode * r = n->get_root();
+        if (!r->is_marked()){
+            if(is_array_sort(r) && ctx.is_shared(r)) {
+              TRACE("array_shared", tout << "new shared var: #" << r->get_owner_id() << "\n";);
+              theory_var r_th_var = r->get_th_var(get_id());
+              SASSERT(r_th_var != null_theory_var);
+              result.push_back(r_th_var);
+            }
+            r->set_mark();
+            to_unmark.push_back(r);
+        }
             }
         }
         unmark_enodes(to_unmark.size(), to_unmark.c_ptr());
@@ -617,8 +615,8 @@ namespace smt {
         m_else_values.reset();
         m_parents.reset();
         m_parents.resize(num_vars, -1);
-        m_defaults.resize(num_vars, 0);
-        m_else_values.resize(num_vars, 0);
+        m_defaults.resize(num_vars);
+        m_else_values.resize(num_vars);
     
         if (m_use_unspecified_default)
             return;

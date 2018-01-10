@@ -19,12 +19,12 @@ Notes:
 #ifndef CARD2BV_TACTIC_H_
 #define CARD2BV_TACTIC_H_
 
-#include"params.h"
-#include"pb_decl_plugin.h"
-#include"th_rewriter.h"
-#include"rewriter.h"
+#include "util/params.h"
+#include "ast/pb_decl_plugin.h"
+#include "ast/rewriter/th_rewriter.h"
+#include "ast/rewriter/rewriter.h"
 #include<typeinfo>
-#include"sorting_network.h"
+#include "util/sorting_network.h"
 
 
 class ast_manager;
@@ -52,6 +52,9 @@ namespace pb {
         expr* mk_ite(expr* c, expr* hi, expr* lo);
         bool is_or(func_decl* f);
         bool is_and(func_decl* f);
+        bool is_atmost1(func_decl* f, unsigned sz, expr * const* args, expr_ref& result);
+        expr_ref mk_atmost1(unsigned sz, expr * const* args);
+        void mk_at_most_1_small(bool last, unsigned n, literal const* xs, expr_ref_vector& result, expr_ref_vector& ors);
 
     public:
         card2bv_rewriter(ast_manager& m);

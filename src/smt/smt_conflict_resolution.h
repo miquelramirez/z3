@@ -19,17 +19,17 @@ Revision History:
 #ifndef SMT_CONFLICT_RESOLUTION_H_
 #define SMT_CONFLICT_RESOLUTION_H_
 
-#include"smt_literal.h"
-#include"smt_bool_var_data.h"
-#include"smt_justification.h"
-#include"smt_enode.h"
-#include"dyn_ack.h"
-#include"obj_pair_hashtable.h"
-#include"smt_params.h"
-#include"obj_pair_hashtable.h"
-#include"map.h"
-#include"watch_list.h"
-#include"obj_pair_set.h"
+#include "smt/smt_literal.h"
+#include "smt/smt_bool_var_data.h"
+#include "smt/smt_justification.h"
+#include "smt/smt_enode.h"
+#include "smt/dyn_ack.h"
+#include "util/obj_pair_hashtable.h"
+#include "smt/params/smt_params.h"
+#include "util/obj_pair_hashtable.h"
+#include "util/map.h"
+#include "smt/watch_list.h"
+#include "util/obj_pair_set.h"
 
 typedef approx_set_tpl<unsigned, u2u, unsigned> level_approx_set;
 
@@ -168,6 +168,7 @@ namespace smt {
         void eq_branch2literals(enode * n1, enode * n2);
         void eq2literals(enode * n1, enode * n2);
         void justification2literals_core(justification * js, literal_vector & result) ;
+        void process_justifications();
         void unmark_justifications(unsigned old_js_qhead);
 
         literal_vector m_tmp_literal_vector;
@@ -256,6 +257,8 @@ namespace smt {
         }
 
         void justification2literals(justification * js, literal_vector & result);
+
+        void eq2literals(enode * n1, enode * n2, literal_vector & result);
 
     };
 

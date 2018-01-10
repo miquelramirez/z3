@@ -45,11 +45,6 @@ def enumerate_sets(solver):
         else:
            break
 
-class CompareSetSize():
-   def __call__(self, s1, s2):
-       return len(s1) < len(s2) 
-
-
 class MSSSolver:
    s = Solver()
    varcache = {}
@@ -73,6 +68,10 @@ class MSSSolver:
              self.varcache[i] = Not(v)
        return self.varcache[i]
 
+   # Retrieve the latest model
+   # Add formulas that are true in the model to 
+   # the current mss
+
    def update_unknown(self):
        self.model = self.s.model()
        new_unknown = set([])
@@ -83,23 +82,29 @@ class MSSSolver:
               new_unknown.add(x)
        self.unknown = new_unknown
       
-   def relax_core(self, core):
-       assert(core <= self.soft_vars)
-       prev = BoolVal(True)
-       core_list = [x for x in core]
-       self.soft_vars -= core
-       # replace x0, x1, x2, .. by
-       # Or(x1, x0), Or(x2, And(x1, x0)), Or(x3, And(x2, And(x1, x0))), ...
-       for i in range(len(core_list)-1):
-           x = core_list[i]
-           y = core_list[i+1]
-           prevf = And(x, prev)
-           prev = Bool("%s" % prevf)
-           self.s.add(prev == prevf)
-           zf = Or(prev, y)
-           z = Bool("%s" % zf)
-           self.s.add(z == zf)
-           self.soft_vars.add(z)
+   # Create a name, propositional atom,
+   #  for formula 'fml' and return the name.
+
+   def add_def(self, fml):
+       name = Bool("%s" % fml)
+       self.s.add(name == fml)
+       return name
+
+   # replace Fs := f0, f1, f2, .. by
+   # Or(f1, f0), Or(f2, And(f1, f0)), Or(f3, And(f2, And(f1, f0))), ...
+
+   def relax_core(self, Fs):
+       assert(Fs <= self.soft_vars)
+       prefix = BoolVal(True)
+       self.soft_vars -= Fs
+       Fs = [ f for f in Fs ]
+       for i in range(len(Fs)-1):
+           prefix = self.add_def(And(Fs[i], prefix))
+           self.soft_vars.add(self.add_def(Or(prefix, Fs[i+1])))
+
+   # Resolve literals from the core that 
+   # are 'explained', e.g., implied by 
+   # other literals.
 
    def resolve_core(self, core):
        new_core = set([])
@@ -110,6 +115,14 @@ class MSSSolver:
               new_core.add(x)
        return new_core
 
+
+   # Given a current satisfiable state
+   # Extract an MSS, and ensure that currently 
+   # encoutered cores are avoided in next iterations
+   # by weakening the set of literals that are
+   # examined in next iterations.
+   # Strengthen the solver state by enforcing that
+   # an element from the MCS is encoutered.
 
    def grow(self):
        self.mss = []
@@ -139,7 +152,7 @@ class MSSSolver:
        mcs = [x for x in self.orig_soft_vars if not is_true(self.model[x])]
        self.s.add(Or(mcs))
        core_literals = set([])
-       cores.sort(CompareSetSize()) 
+       cores.sort(key=lambda element: len(element))
        for core in cores:
            if len(core & core_literals) == 0:
               self.relax_core(core)

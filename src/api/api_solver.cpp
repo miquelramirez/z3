@@ -17,21 +17,28 @@ Revision History:
 
 --*/
 #include<iostream>
-#include"z3.h"
-#include"api_log_macros.h"
-#include"api_context.h"
-#include"api_tactic.h"
-#include"api_solver.h"
-#include"api_model.h"
-#include"api_stats.h"
-#include"api_ast_vector.h"
-#include"tactic2solver.h"
-#include"scoped_ctrl_c.h"
-#include"cancel_eh.h"
-#include"scoped_timer.h"
-#include"smt_strategic_solver.h"
-#include"smt_solver.h"
-#include"smt_implied_equalities.h"
+#include "api/z3.h"
+#include "api/api_log_macros.h"
+#include "api/api_context.h"
+#include "api/api_tactic.h"
+#include "api/api_solver.h"
+#include "api/api_model.h"
+#include "api/api_stats.h"
+#include "api/api_ast_vector.h"
+#include "solver/tactic2solver.h"
+#include "util/scoped_ctrl_c.h"
+#include "util/cancel_eh.h"
+#include "util/file_path.h"
+#include "util/scoped_timer.h"
+#include "tactic/portfolio/smt_strategic_solver.h"
+#include "smt/smt_solver.h"
+#include "smt/smt_implied_equalities.h"
+#include "solver/smt_logics.h"
+#include "cmd_context/cmd_context.h"
+#include "parsers/smt2/smt2parser.h"
+#include "sat/dimacs.h"
+#include "sat/sat_solver.h"
+#include "sat/tactic/goal2sat.h"
 
 extern "C" {
 
@@ -80,10 +87,18 @@ extern "C" {
         Z3_TRY;
         LOG_Z3_mk_solver_for_logic(c, logic);
         RESET_ERROR_CODE();
-        Z3_solver_ref * s = alloc(Z3_solver_ref, *mk_c(c), mk_smt_strategic_solver_factory(to_symbol(logic)));
-        mk_c(c)->save_object(s);
-        Z3_solver r = of_solver(s);
-        RETURN_Z3(r);
+        if (!smt_logics::supported_logic(to_symbol(logic))) {
+            std::ostringstream strm;
+            strm << "logic '" << to_symbol(logic) << "' is not recognized";
+            throw default_exception(strm.str());
+            RETURN_Z3(0);
+        }
+        else {
+            Z3_solver_ref * s = alloc(Z3_solver_ref, *mk_c(c), mk_smt_strategic_solver_factory(to_symbol(logic)));
+            mk_c(c)->save_object(s);
+            Z3_solver r = of_solver(s);
+            RETURN_Z3(r);
+        }
         Z3_CATCH_RETURN(0);
     }
 
@@ -110,6 +125,63 @@ extern "C" {
         Z3_solver r = of_solver(sr);
         RETURN_Z3(r);
         Z3_CATCH_RETURN(0);
+    }
+
+    void solver_from_stream(Z3_context c, Z3_solver s, std::istream& is) {
+        scoped_ptr<cmd_context> ctx = alloc(cmd_context, false, &(mk_c(c)->m()));
+        ctx->set_ignore_check(true);
+
+        if (!parse_smt2_commands(*ctx.get(), is)) {
+            ctx = nullptr;
+            SET_ERROR_CODE(Z3_PARSER_ERROR);
+            return;
+        }
+
+        bool initialized = to_solver(s)->m_solver.get() != 0;
+        if (!initialized)
+            init_solver(c, s);
+        ptr_vector<expr>::const_iterator it  = ctx->begin_assertions();
+        ptr_vector<expr>::const_iterator end = ctx->end_assertions();
+        for (; it != end; ++it) {
+            to_solver_ref(s)->assert_expr(*it);
+        }
+        // to_solver_ref(s)->set_model_converter(ctx->get_model_converter());
+    }
+
+    void Z3_API Z3_solver_from_string(Z3_context c, Z3_solver s, Z3_string c_str) {
+        Z3_TRY;
+        LOG_Z3_solver_from_string(c, s, c_str);
+        std::string str(c_str);
+        std::istringstream is(str);
+        solver_from_stream(c, s, is);
+        Z3_CATCH;        
+    }
+
+    void Z3_API Z3_solver_from_file(Z3_context c, Z3_solver s, Z3_string file_name) {
+        Z3_TRY;
+        LOG_Z3_solver_from_file(c, s, file_name);
+        char const* ext = get_extension(file_name);
+        std::ifstream is(file_name);
+        if (!is) {
+            SET_ERROR_CODE(Z3_FILE_ACCESS_ERROR);
+        }
+        else if (ext && std::string("dimacs") == ext) {
+            ast_manager& m = to_solver_ref(s)->get_manager();
+            sat::solver solver(to_solver_ref(s)->get_params(), m.limit(), nullptr);
+            parse_dimacs(is, solver);
+            sat2goal s2g;
+            model_converter_ref mc;
+            atom2bool_var a2b(m);
+            goal g(m);            
+            s2g(solver, a2b, to_solver_ref(s)->get_params(), g, mc);
+            for (unsigned i = 0; i < g.size(); ++i) {
+                to_solver_ref(s)->assert_expr(g.form(i));
+            }
+        }
+        else {
+            solver_from_stream(c, s, is);
+        }
+        Z3_CATCH;
     }
 
     Z3_string Z3_API Z3_solver_get_help(Z3_context c, Z3_solver s) {
@@ -287,9 +359,13 @@ extern "C" {
                 result = to_solver_ref(s)->check_sat(num_assumptions, _assumptions);
             }
             catch (z3_exception & ex) {
+                to_solver_ref(s)->set_reason_unknown(eh);
                 mk_c(c)->handle_exception(ex);
                 return Z3_L_UNDEF;
             }
+        }
+        if (result == l_undef) {
+            to_solver_ref(s)->set_reason_unknown(eh);
         }
         return static_cast<Z3_lbool>(result);
     }
@@ -429,6 +505,7 @@ extern "C" {
         unsigned sz = __assumptions.size();
         for (unsigned i = 0; i < sz; ++i) {
             if (!is_expr(__assumptions[i])) {
+                _assumptions.finalize(); _consequences.finalize(); _variables.finalize();
                 SET_ERROR_CODE(Z3_INVALID_USAGE);
                 return Z3_L_UNDEF;
             }
@@ -438,12 +515,35 @@ extern "C" {
         sz = __variables.size();
         for (unsigned i = 0; i < sz; ++i) {
             if (!is_expr(__variables[i])) {
+                _assumptions.finalize(); _consequences.finalize(); _variables.finalize();
                 SET_ERROR_CODE(Z3_INVALID_USAGE);
                 return Z3_L_UNDEF;
             }
             _variables.push_back(to_expr(__variables[i]));
         }
-        lbool result = to_solver_ref(s)->get_consequences(_assumptions, _variables, _consequences);
+        lbool result = l_undef;
+        unsigned timeout     = to_solver(s)->m_params.get_uint("timeout", mk_c(c)->get_timeout());
+        unsigned rlimit      = to_solver(s)->m_params.get_uint("rlimit", mk_c(c)->get_rlimit());
+        bool     use_ctrl_c  = to_solver(s)->m_params.get_bool("ctrl_c", false);
+        cancel_eh<reslimit> eh(mk_c(c)->m().limit());
+        api::context::set_interruptable si(*(mk_c(c)), eh);
+        {
+            scoped_ctrl_c ctrlc(eh, false, use_ctrl_c);
+            scoped_timer timer(timeout, &eh);
+            scoped_rlimit _rlimit(mk_c(c)->m().limit(), rlimit);
+            try {
+                result = to_solver_ref(s)->get_consequences(_assumptions, _variables, _consequences);
+            }
+            catch (z3_exception & ex) {
+                to_solver_ref(s)->set_reason_unknown(eh);
+                _assumptions.finalize(); _consequences.finalize(); _variables.finalize();
+                mk_c(c)->handle_exception(ex);
+                return Z3_L_UNDEF;
+            }
+        }
+        if (result == l_undef) {
+            to_solver_ref(s)->set_reason_unknown(eh);
+        }
         for (unsigned i = 0; i < _consequences.size(); ++i) {
             to_ast_vector_ref(consequences).push_back(_consequences[i].get());
         }

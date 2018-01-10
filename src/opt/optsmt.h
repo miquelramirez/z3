@@ -19,7 +19,7 @@ Notes:
 #ifndef OPTSMT_H_
 #define OPTSMT_H_
 
-#include "opt_solver.h"
+#include "opt/opt_solver.h"
 
 namespace opt {
     /**
@@ -48,6 +48,8 @@ namespace opt {
         lbool box();
 
         lbool lex(unsigned obj_index, bool is_maximize);
+
+        bool is_unbounded(unsigned obj_index, bool is_maximize);
 
         unsigned add(app* t);
 

@@ -20,9 +20,9 @@ Revision History:
 #define DL_RELATION_MANAGER_H_
 
 
-#include"map.h"
-#include"vector.h"
-#include"dl_base.h"
+#include "util/map.h"
+#include "util/vector.h"
+#include "muz/rel/dl_base.h"
 
 namespace datalog {
 
@@ -609,7 +609,7 @@ namespace datalog {
         std::string to_nice_string(const relation_element & el) const;
         /**
            This one may give a nicer representation of \c el than the 
-           \c to_nice_string(const relation_element & el) function, by unsing the information about the sort
+           \c to_nice_string(const relation_element & el) function, by using the information about the sort
            of the element.
         */
         std::string to_nice_string(const relation_sort & s, const relation_element & el) const;

@@ -18,15 +18,14 @@ Revision History:
 
 --*/
 #include<typeinfo>
-#include"api_context.h"
-#include"smtparser.h"
-#include"version.h"
-#include"ast_pp.h"
-#include"ast_ll_pp.h"
-#include"api_log_macros.h"
-#include"api_util.h"
-#include"reg_decl_plugins.h"
-#include"realclosure.h"
+#include "api/api_context.h"
+#include "util/version.h"
+#include "ast/ast_pp.h"
+#include "ast/ast_ll_pp.h"
+#include "api/api_log_macros.h"
+#include "api/api_util.h"
+#include "ast/reg_decl_plugins.h"
+#include "math/realclosure/realclosure.h"
 
 // The install_tactics procedure is automatically generated
 void install_tactics(tactic_manager & ctx);
@@ -70,22 +69,6 @@ namespace api {
     //
     // ------------------------
 
-    context::set_interruptable::set_interruptable(context & ctx, event_handler & i):
-        m_ctx(ctx) {
-        #pragma omp critical (set_interruptable) 
-        {
-            SASSERT(m_ctx.m_interruptable == 0);
-            m_ctx.m_interruptable = &i;
-        }
-    }
-
-    context::set_interruptable::~set_interruptable() {
-        #pragma omp critical (set_interruptable) 
-        {
-            m_ctx.m_interruptable = 0;
-        }
-    }
-
     context::context(context_params * p, bool user_ref_count):
         m_params(p != 0 ? *p : context_params()),
         m_user_ref_count(user_ref_count),
@@ -105,11 +88,8 @@ namespace api {
         m_print_mode = Z3_PRINT_SMTLIB_FULL;
         m_searching  = false;
         
-        m_interruptable = 0;
 
-        m_smtlib_parser           = 0;
-        m_smtlib_parser_has_decls = false;
-                
+        m_interruptable = 0;                
         m_error_handler = &default_error_handler;
 
         m_basic_fid = m().get_basic_family_id();
@@ -128,14 +108,30 @@ namespace api {
 
 
     context::~context() {
-        reset_parser();
         m_last_obj = 0;
         u_map<api::object*>::iterator it = m_allocated_objects.begin();
         while (it != m_allocated_objects.end()) {
-            DEBUG_CODE(warning_msg("Uncollected memory: %d: %s", it->m_key, typeid(*it->m_value).name()););
+            api::object* val = it->m_value;
+            DEBUG_CODE(warning_msg("Uncollected memory: %d: %s", it->m_key, typeid(*val).name()););
             m_allocated_objects.remove(it->m_key);
-            dealloc(it->m_value);
+            dealloc(val);
             it = m_allocated_objects.begin();
+        }
+    }
+
+    context::set_interruptable::set_interruptable(context & ctx, event_handler & i):
+        m_ctx(ctx) {
+        #pragma omp critical (set_interruptable) 
+        {
+            SASSERT(m_ctx.m_interruptable == 0);
+            m_ctx.m_interruptable = &i;
+        }
+    }
+
+    context::set_interruptable::~set_interruptable() {
+        #pragma omp critical (set_interruptable) 
+        {
+            m_ctx.m_interruptable = 0;
         }
     }
 
@@ -143,7 +139,7 @@ namespace api {
         #pragma omp critical (set_interruptable)
         {
             if (m_interruptable)
-                (*m_interruptable)();
+                (*m_interruptable)(API_INTERRUPT_EH_CALLER);
             m_limit.cancel();
             m().limit().cancel();
         }
@@ -151,9 +147,16 @@ namespace api {
     
     void context::set_error_code(Z3_error_code err) {
         m_error_code = err; 
-        if (err != Z3_OK) 
+        if (err != Z3_OK) {
             invoke_error_handler(err); 
+        }
     }
+
+    void context::reset_error_code() { 
+        m_error_code = Z3_OK; 
+    }
+
+
 
     void context::check_searching() {
         if (m_searching) { 
@@ -304,39 +307,6 @@ namespace api {
         }
     }
 
-
-    // ------------------------
-    //
-    // Parser interface for backward compatibility 
-    //
-    // ------------------------
-    
-    void context::reset_parser() {
-        if (m_smtlib_parser) {
-            dealloc(m_smtlib_parser);
-            m_smtlib_parser = 0;
-            m_smtlib_parser_has_decls = false;
-            m_smtlib_parser_decls.reset();
-            m_smtlib_parser_sorts.reset();
-        }
-        SASSERT(!m_smtlib_parser_has_decls);
-    }
-    
-    void context::extract_smtlib_parser_decls() {
-        if (m_smtlib_parser) {
-            if (!m_smtlib_parser_has_decls) {
-                smtlib::symtable * table = m_smtlib_parser->get_benchmark()->get_symtable();
-                table->get_func_decls(m_smtlib_parser_decls);
-                table->get_sorts(m_smtlib_parser_sorts);
-                m_smtlib_parser_has_decls = true;
-            }
-        }
-        else {
-            m_smtlib_parser_decls.reset();
-            m_smtlib_parser_sorts.reset();
-        }
-    }
-
     // ------------------------
     //
     // RCF manager
@@ -415,6 +385,7 @@ extern "C" {
             return;
         }
         mk_c(c)->m().dec_ref(to_ast(a));
+
         Z3_CATCH;
     }
 

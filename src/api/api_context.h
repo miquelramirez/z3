@@ -20,22 +20,22 @@ Revision History:
 #ifndef API_CONTEXT_H_
 #define API_CONTEXT_H_
 
-#include"z3.h"
-#include"ast.h"
-#include"api_util.h"
-#include"arith_decl_plugin.h"
-#include"bv_decl_plugin.h"
-#include"seq_decl_plugin.h"
-#include"datatype_decl_plugin.h"
-#include"dl_decl_plugin.h"
-#include"fpa_decl_plugin.h"
-#include"smt_kernel.h"
-#include"smt_params.h"
-#include"event_handler.h"
-#include"tactic_manager.h"
-#include"context_params.h"
-#include"api_polynomial.h"
-#include"hashtable.h"
+#include "api/z3.h"
+#include "ast/ast.h"
+#include "api/api_util.h"
+#include "ast/arith_decl_plugin.h"
+#include "ast/bv_decl_plugin.h"
+#include "ast/seq_decl_plugin.h"
+#include "ast/datatype_decl_plugin.h"
+#include "ast/dl_decl_plugin.h"
+#include "ast/fpa_decl_plugin.h"
+#include "smt/smt_kernel.h"
+#include "smt/params/smt_params.h"
+#include "util/event_handler.h"
+#include "cmd_context/tactic_manager.h"
+#include "cmd_context/context_params.h"
+#include "api/api_polynomial.h"
+#include "util/hashtable.h"
 
 namespace smtlib {
     class parser;
@@ -94,7 +94,7 @@ namespace api {
 
         event_handler *            m_interruptable; // Reference to an object that can be interrupted by Z3_interrupt
 
-    public:
+     public:
         // Scoped obj for setting m_interruptable
         class set_interruptable {
             context & m_ctx;
@@ -138,7 +138,7 @@ namespace api {
         datatype_decl_plugin * get_dt_plugin() const { return m_dt_plugin; }
 
         Z3_error_code get_error_code() const { return m_error_code; }
-        void reset_error_code() { m_error_code = Z3_OK; }
+        void reset_error_code();
         void set_error_code(Z3_error_code err);
         void set_error_handler(Z3_error_handler h) { m_error_handler = h; }
         // Sign an error if solver is searching
@@ -220,19 +220,11 @@ namespace api {
 
         // ------------------------
         //
-        // Parser interface for backward compatibility 
+        // Parser interface 
         //
         // ------------------------
 
-        // TODO: move to a "parser" object visible to the external world.
-        std::string                m_smtlib_error_buffer;
-        smtlib::parser *           m_smtlib_parser;
-        bool                       m_smtlib_parser_has_decls;
-        ptr_vector<func_decl>      m_smtlib_parser_decls;
-        ptr_vector<sort>           m_smtlib_parser_sorts;
-        
-        void reset_parser();
-        void extract_smtlib_parser_decls();
+        std::string m_parser_error_buffer;        
         
     };
     
@@ -245,7 +237,7 @@ inline api::context * mk_c(Z3_context c) { return reinterpret_cast<api::context*
 #define CHECK_VALID_AST(_a_, _ret_) { if (_a_ == 0 || !CHECK_REF_COUNT(_a_)) { SET_ERROR_CODE(Z3_INVALID_ARG); return _ret_; } }
 #define CHECK_SEARCHING(c) mk_c(c)->check_searching();
 inline bool is_expr(Z3_ast a) { return is_expr(to_ast(a)); }
-#define CHECK_IS_EXPR(_p_, _ret_) { if (!is_expr(_p_)) { SET_ERROR_CODE(Z3_INVALID_ARG); return _ret_; } }
+#define CHECK_IS_EXPR(_p_, _ret_) { if (_p_ == 0 || !is_expr(_p_)) { SET_ERROR_CODE(Z3_INVALID_ARG); return _ret_; } }
 inline bool is_bool_expr(Z3_context c, Z3_ast a) { return is_expr(a) && mk_c(c)->m().is_bool(to_expr(a)); }
 #define CHECK_FORMULA(_a_, _ret_) { if (_a_ == 0 || !CHECK_REF_COUNT(_a_) || !is_bool_expr(c, _a_)) { SET_ERROR_CODE(Z3_INVALID_ARG); return _ret_; } }
 inline void check_sorts(Z3_context c, ast * n) { mk_c(c)->check_sorts(n); }

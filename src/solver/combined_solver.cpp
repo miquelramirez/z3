@@ -18,9 +18,10 @@ Author:
 Notes:
 
 --*/
-#include"solver.h"
-#include"scoped_timer.h"
-#include"combined_solver_params.hpp"
+#include "solver/solver.h"
+#include "util/scoped_timer.h"
+#include "solver/combined_solver_params.hpp"
+#include "util/common_msgs.h"
 #define PS_VB_LVL 15
 
 /**
@@ -88,8 +89,8 @@ private:
                 m_solver->get_manager().limit().dec_cancel();
             }
         }
-        virtual void operator()() {
-            m_canceled = true;
+        virtual void operator()(event_handler_caller_t caller_id) {
+            m_canceled = true;            
             m_solver->get_manager().limit().inc_cancel();
         }
     };
@@ -101,7 +102,7 @@ private:
         m_inc_unknown_behavior = static_cast<inc_unknown_behavior>(p.solver2_unknown());
     }
 
-    virtual ast_manager& get_manager() { return m_solver1->get_manager(); }
+    virtual ast_manager& get_manager() const { return m_solver1->get_manager(); }
 
     bool has_quantifiers() const {
         unsigned sz = get_num_assertions();
@@ -146,6 +147,7 @@ public:
     }
 
     virtual void updt_params(params_ref const & p) {
+        solver::updt_params(p);
         m_solver1->updt_params(p);
         m_solver2->updt_params(p);
         updt_local_params(p);
@@ -196,7 +198,19 @@ public:
 
     virtual lbool get_consequences(expr_ref_vector const& asms, expr_ref_vector const& vars, expr_ref_vector& consequences) {
         switch_inc_mode();
-        return m_solver2->get_consequences(asms, vars, consequences);
+        m_use_solver1_results = false;
+        try {
+            return m_solver2->get_consequences(asms, vars, consequences);
+        }
+        catch (z3_exception& ex) {
+            if (get_manager().canceled()) {
+                set_reason_unknown(Z3_CANCELED_MSG);
+            }
+            else {
+                set_reason_unknown(ex.msg());
+            }
+        }
+        return l_undef;
     }
 
     virtual lbool check_sat(unsigned num_assumptions, expr * const * assumptions) {
@@ -204,7 +218,7 @@ public:
         m_use_solver1_results = false;
 
         if (get_num_assumptions() != 0 ||            
-            num_assumptions > 0 ||  // assumptions were provided
+            num_assumptions > 0 ||  // assumptions were provided            
             m_ignore_solver1)  {
             // must use incremental solver
             switch_inc_mode();
@@ -214,8 +228,8 @@ public:
         if (m_inc_mode) {
             if (m_inc_timeout == UINT_MAX) {
                 IF_VERBOSE(PS_VB_LVL, verbose_stream() << "(combined-solver \"using solver 2 (without a timeout)\")\n";);            
-                lbool r = m_solver2->check_sat(0, 0);
-                if (r != l_undef || !use_solver1_when_undef()) {
+                lbool r = m_solver2->check_sat(num_assumptions, assumptions);
+                if (r != l_undef || !use_solver1_when_undef() || get_manager().canceled()) {
                     return r;
                 }
             }
@@ -225,7 +239,7 @@ public:
                 lbool r = l_undef;
                 try {
                     scoped_timer timer(m_inc_timeout, &eh);
-                    r = m_solver2->check_sat(0, 0);
+                    r = m_solver2->check_sat(num_assumptions, assumptions);
                 }
                 catch (z3_exception&) {
                     if (!eh.m_canceled) {
@@ -241,7 +255,7 @@ public:
         
         IF_VERBOSE(PS_VB_LVL, verbose_stream() << "(combined-solver \"using solver 1\")\n";);
         m_use_solver1_results = true;
-        return m_solver1->check_sat(0, 0);
+        return m_solver1->check_sat(num_assumptions, assumptions);
     }
     
     virtual void set_progress_callback(progress_callback * callback) {
@@ -267,15 +281,14 @@ public:
         return m_solver2->get_assumption(idx - c1);
     }
 
-    virtual std::ostream& display(std::ostream & out) const {
-        return m_solver1->display(out);
+    virtual std::ostream& display(std::ostream & out, unsigned n, expr* const* es) const {
+        return m_solver1->display(out, n, es);
     }
 
     virtual void collect_statistics(statistics & st) const {
+        m_solver2->collect_statistics(st);
         if (m_use_solver1_results)
             m_solver1->collect_statistics(st);
-        else
-            m_solver2->collect_statistics(st);
     }
 
     virtual void get_unsat_core(ptr_vector<expr> & r) {

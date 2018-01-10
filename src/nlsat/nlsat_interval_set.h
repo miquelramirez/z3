@@ -19,7 +19,7 @@ Revision History:
 #ifndef NLSAT_INTERVAL_SET_H_
 #define NLSAT_INTERVAL_SET_H_
 
-#include"nlsat_types.h"
+#include "nlsat/nlsat_types.h"
 
 namespace nlsat {
 
@@ -108,7 +108,7 @@ namespace nlsat {
            
            \pre !is_full(s)
         */
-        void peek_in_complement(interval_set const * s, anum & w, bool randomize);
+        void peek_in_complement(interval_set const * s, bool is_int, anum & w, bool randomize);
     };
 
     typedef obj_ref<interval_set, interval_set_manager> interval_set_ref;

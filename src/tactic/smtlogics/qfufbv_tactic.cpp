@@ -17,28 +17,29 @@ Author:
 Notes:
 
 --*/
-#include"tactical.h"
-#include"simplify_tactic.h"
-#include"propagate_values_tactic.h"
-#include"solve_eqs_tactic.h"
-#include"elim_uncnstr_tactic.h"
-#include"smt_tactic.h"
-#include"max_bv_sharing_tactic.h"
-#include"bv_size_reduction_tactic.h"
-#include"reduce_args_tactic.h"
-#include"qfbv_tactic.h"
-#include"qfufbv_tactic_params.hpp"
+#include "tactic/tactical.h"
+#include "tactic/core/simplify_tactic.h"
+#include "tactic/core/propagate_values_tactic.h"
+#include "tactic/core/solve_eqs_tactic.h"
+#include "tactic/core/elim_uncnstr_tactic.h"
+#include "smt/tactic/smt_tactic.h"
+#include "tactic/bv/max_bv_sharing_tactic.h"
+#include "tactic/bv/bv_size_reduction_tactic.h"
+#include "tactic/core/reduce_args_tactic.h"
+#include "tactic/smtlogics/qfbv_tactic.h"
+#include "tactic/smtlogics/qfufbv_tactic_params.hpp"
 ///////////////
-#include"model_smt2_pp.h"
-#include"cooperate.h"
-#include"lackr.h"
-#include"ackermannization_params.hpp"
-#include"qfufbv_ackr_model_converter.h"
+#include "model/model_smt2_pp.h"
+#include "util/cooperate.h"
+#include "ackermannization/lackr.h"
+#include "ackermannization/ackermannization_params.hpp"
+#include "tactic/smtlogics/qfufbv_ackr_model_converter.h"
 ///////////////
-#include"inc_sat_solver.h"
-#include"qfaufbv_tactic.h"
-#include"qfbv_tactic.h"
-#include"tactic2solver.h"
+#include "sat/sat_solver/inc_sat_solver.h"
+#include "tactic/smtlogics/qfaufbv_tactic.h"
+#include "tactic/smtlogics/qfbv_tactic.h"
+#include "solver/tactic2solver.h"
+#include "tactic/bv/bv_bound_chk_tactic.h"
 ///////////////
 
 class qfufbv_ackr_tactic : public tactic {
@@ -69,8 +70,8 @@ public:
         const unsigned sz = g->size();
         for (unsigned i = 0; i < sz; i++) flas.push_back(g->form(i));
         scoped_ptr<solver> uffree_solver = setup_sat();
-        scoped_ptr<lackr> imp = alloc(lackr, m, m_p, m_st, flas, uffree_solver.get());
-        const lbool o = imp->operator()();
+        lackr imp(m, m_p, m_st, flas, uffree_solver.get());
+        const lbool o = imp.operator()();
         flas.reset();
         // report result
         goal_ref resg(alloc(goal, *g, true));
@@ -78,8 +79,8 @@ public:
         if (o != l_undef) result.push_back(resg.get());
         // report model
         if (g->models_enabled() && (o == l_true)) {
-            model_ref abstr_model = imp->get_model();
-            mc = mk_qfufbv_ackr_model_converter(m, imp->get_info(), abstr_model);
+            model_ref abstr_model = imp.get_model();
+            mc = mk_qfufbv_ackr_model_converter(m, imp.get_info(), abstr_model);
         }
     }
 
@@ -149,6 +150,7 @@ static tactic * mk_qfufbv_preamble1(ast_manager & m, params_ref const & p) {
     return and_then(
         mk_simplify_tactic(m),
         mk_propagate_values_tactic(m),
+        if_no_proofs(if_no_unsat_cores(mk_bv_bound_chk_tactic(m))),
         //using_params(mk_ctx_simplify_tactic(m_m), ctx_simp_p),
         mk_solve_eqs_tactic(m),
         mk_elim_uncnstr_tactic(m),

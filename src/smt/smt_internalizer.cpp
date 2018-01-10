@@ -16,13 +16,13 @@ Author:
 Revision History:
 
 --*/
-#include"smt_context.h"
-#include"expr_stat.h"
-#include"ast_pp.h"
-#include"ast_ll_pp.h"
-#include"ast_smt2_pp.h"
-#include"smt_model_finder.h"
-#include"for_each_expr.h"
+#include "smt/smt_context.h"
+#include "ast/expr_stat.h"
+#include "ast/ast_pp.h"
+#include "ast/ast_ll_pp.h"
+#include "ast/ast_smt2_pp.h"
+#include "smt/smt_model_finder.h"
+#include "ast/for_each_expr.h"
 
 namespace smt {
 
@@ -198,19 +198,19 @@ namespace smt {
         if (get_depth(n) > DEEP_EXPR_THRESHOLD) {
             // if the expression is deep, then execute topological sort to avoid
             // stack overflow.
+            // a caveat is that theory internalizers do rely on recursive descent so
+            // internalization over these follows top-down
             TRACE("deep_internalize", tout << "expression is deep: #" << n->get_id() << "\n" << mk_ll_pp(n, m_manager););
             svector<expr_bool_pair> sorted_exprs;
             top_sort_expr(n, sorted_exprs);
-            TRACE("deep_internalize", 
-                  svector<expr_bool_pair>::const_iterator it  = sorted_exprs.begin();
-                  svector<expr_bool_pair>::const_iterator end = sorted_exprs.end();
-                  for (; it != end; ++it) {
-                      tout << "#" << it->first->get_id() << " " << it->second << "\n";
-                  });
-            svector<expr_bool_pair>::const_iterator it  = sorted_exprs.begin();
-            svector<expr_bool_pair>::const_iterator end = sorted_exprs.end();
-            for (; it != end; ++it)
-                internalize(it->first, it->second);
+            TRACE("deep_internalize", for (auto & kv : sorted_exprs) tout << "#" << kv.first->get_id() << " " << kv.second << "\n"; );
+            for (auto & kv : sorted_exprs) {
+                expr* e = kv.first;
+                if (!is_app(e) || 
+                    to_app(e)->get_family_id() == null_family_id || 
+                    to_app(e)->get_family_id() == m_manager.get_basic_family_id()) 
+                    internalize(e, kv.second);
+            }
         }
         SASSERT(m_manager.is_bool(n));
         if (is_gate(m_manager, n)) {
@@ -335,23 +335,6 @@ namespace smt {
         }
     }
 
-    bool find_arg(app * n, expr * t, expr * & other) {
-        SASSERT(n->get_num_args() == 2);
-        if (n->get_arg(0) == t) {
-            other = n->get_arg(1);
-            return true;
-        }
-        else if (n->get_arg(1) == t) {
-            other = n->get_arg(0);
-            return true;
-        }
-        return false;
-    }
-
-    bool check_args(app * n, expr * t1, expr * t2) {
-        SASSERT(n->get_num_args() == 2);
-        return (n->get_arg(0) == t1 && n->get_arg(1) == t2) || (n->get_arg(1) == t1 && n->get_arg(0) == t2);
-    }
 
     /**
        \brief Internalize the given formula into the logical context.
@@ -386,7 +369,7 @@ namespace smt {
                 else {
                     TRACE("internalize_bug", tout << "creating enode for #" << n->get_id() << "\n";);
                     mk_enode(to_app(n), 
-                             true, /* supress arguments, we not not use CC for this kind of enode */
+                             true, /* suppress arguments, we not not use CC for this kind of enode */
                              true, /* bool enode must be merged with true/false, since it is not in the context of a gate */
                              false /* CC is not enabled */ );
                     set_enode_flag(v, false);
@@ -470,7 +453,7 @@ namespace smt {
             // must be associated with an enode.
             if (!e_internalized(n)) {
                 mk_enode(to_app(n), 
-                         true, /* supress arguments, we not not use CC for this kind of enode */
+                         true, /* suppress arguments, we not not use CC for this kind of enode */
                          true  /* bool enode must be merged with true/false, since it is not in the context of a gate */,
                          false /* CC is not enabled */);
             }
@@ -756,7 +739,7 @@ namespace smt {
         app_ref eq1(mk_eq_atom(n, t), m_manager);
         app_ref eq2(mk_eq_atom(n, e), m_manager);
         mk_enode(n, 
-                 true /* supress arguments, I don't want to apply CC on ite terms */, 
+                 true /* suppress arguments, I don't want to apply CC on ite terms */,
                  false /* it is a term, so it should not be merged with true/false */,
                  false /* CC is not enabled */);
         internalize(c, true);
@@ -814,7 +797,7 @@ namespace smt {
         }
         
         enode * e = mk_enode(n, 
-                             false, /* do not supress args */
+                             false, /* do not suppress args */
                              false, /* it is a term, so it should not be merged with true/false */
                              true);
         apply_sort_cnstr(n, e);
@@ -840,7 +823,7 @@ namespace smt {
         }
 #endif
         TRACE("mk_bool_var", tout << "creating boolean variable: " << v << " for:\n" << mk_pp(n, m_manager) << "\n";);
-        TRACE("mk_var_bug", tout << "mk_bool: " << v << "\n";);        
+        TRACE("mk_var_bug", tout << "mk_bool: " << v << "\n";);                
         set_bool_var(id, v);
         m_bdata.reserve(v+1);
         m_activity.reserve(v+1);
@@ -1051,8 +1034,10 @@ namespace smt {
             lbool   val  = get_assignment(curr);
             switch(val) {
             case l_false:
+                TRACE("simplify_aux_clause_literals", display_literal(tout << get_assign_level(curr) << " " << get_scope_level() << " ", curr); tout << "\n"; );
                 simp_lits.push_back(~curr);
-                break; // ignore literal
+                break; // ignore literal                
+                // fall through
             case l_undef:
                 if (curr == ~prev)
                     return false; // clause is equivalent to true
@@ -1281,10 +1266,9 @@ namespace smt {
        The deletion event handler is ignored if binary clause optimization is applicable.
     */
     clause * context::mk_clause(unsigned num_lits, literal * lits, justification * j, clause_kind k, clause_del_eh * del_eh) {
-        TRACE("mk_clause", tout << "creating clause:\n"; display_literals(tout, num_lits, lits); tout << "\n";);
+        TRACE("mk_clause", tout << "creating clause:\n"; display_literals_verbose(tout, num_lits, lits); tout << "\n";);
         switch (k) {
         case CLS_AUX: {
-            unsigned old_num_lits = num_lits;
             literal_buffer simp_lits;
             if (!simplify_aux_clause_literals(num_lits, lits, simp_lits))
                 return 0; // clause is equivalent to true;
@@ -1522,7 +1506,7 @@ namespace smt {
             relevancy_eh * eh = m_relevancy_propagator->mk_and_relevancy_eh(n);
             unsigned num = n->get_num_args();
             for (unsigned i = 0; i < num; i++) {
-                // if one child is assigned to false, the the and-parent must be notified
+                // if one child is assigned to false, the and-parent must be notified
                 literal l = get_literal(n->get_arg(i));
                 add_rel_watch(~l, eh);
             }
@@ -1534,7 +1518,7 @@ namespace smt {
             relevancy_eh * eh = m_relevancy_propagator->mk_or_relevancy_eh(n);
             unsigned num = n->get_num_args();
             for (unsigned i = 0; i < num; i++) {
-                // if one child is assigned to true, the the or-parent must be notified
+                // if one child is assigned to true, the or-parent must be notified
                 literal l = get_literal(n->get_arg(i));
                 add_rel_watch(l, eh);
             }

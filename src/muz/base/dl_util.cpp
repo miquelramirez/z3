@@ -23,14 +23,14 @@ Revision History:
 #ifdef _WINDOWS
 #include <windows.h>
 #endif
-#include"ast_pp.h"
-#include"bool_rewriter.h"
-#include"for_each_expr.h"
-#include"scoped_proof.h"
-#include"dl_context.h"
-#include"dl_rule.h"
-#include"dl_util.h"
-#include"stopwatch.h"
+#include "ast/ast_pp.h"
+#include "ast/rewriter/bool_rewriter.h"
+#include "ast/for_each_expr.h"
+#include "ast/scoped_proof.h"
+#include "muz/base/dl_context.h"
+#include "muz/base/dl_rule.h"
+#include "muz/base/dl_util.h"
+#include "util/stopwatch.h"
 
 namespace datalog {
 
@@ -277,16 +277,21 @@ namespace datalog {
         return get_max_var(has_var);
     }
 
-    void del_rule(horn_subsume_model_converter* mc, rule& r) {
+    void del_rule(horn_subsume_model_converter* mc, rule& r, bool unreachable) {
         if (mc) {
             ast_manager& m = mc->get_manager();
             expr_ref_vector body(m);
-            for (unsigned i = 0; i < r.get_tail_size(); ++i) {
-                if (r.is_neg_tail(i)) {
-                    body.push_back(m.mk_not(r.get_tail(i)));
-                }
-                else {
-                    body.push_back(r.get_tail(i));
+            if (unreachable) {
+                body.push_back(m.mk_false());
+            }
+            else {
+                for (unsigned i = 0; i < r.get_tail_size(); ++i) {
+                    if (r.is_neg_tail(i)) {
+                        body.push_back(m.mk_not(r.get_tail(i)));
+                    }
+                    else {
+                        body.push_back(r.get_tail(i));
+                    }
                 }
             }
             TRACE("dl_dr", 

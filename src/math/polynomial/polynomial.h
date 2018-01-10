@@ -19,16 +19,17 @@ Notes:
 #ifndef POLYNOMIAL_H_
 #define POLYNOMIAL_H_
 
-#include"mpz.h"
-#include"rational.h"
-#include"obj_ref.h"
-#include"ref_vector.h"
-#include"z3_exception.h"
-#include"scoped_numeral.h"
-#include"scoped_numeral_vector.h"
-#include"params.h"
-#include"mpbqi.h"
-#include"rlimit.h"
+#include "util/mpz.h"
+#include "util/rational.h"
+#include "util/obj_ref.h"
+#include "util/ref_vector.h"
+#include "util/z3_exception.h"
+#include "util/scoped_numeral.h"
+#include "util/scoped_numeral_vector.h"
+#include "util/params.h"
+#include "util/mpbqi.h"
+#include "util/rlimit.h"
+#include "util/lbool.h"
 
 class small_object_allocator;
 
@@ -63,8 +64,8 @@ namespace polynomial {
     public:
         void set_degree(var x, unsigned d) { m_var2degree.setx(x, d, 0); }
         unsigned degree(var x) const { return m_var2degree.get(x, 0); }
-		void display(std::ostream & out) const;
-		friend std::ostream & operator<<(std::ostream & out, var2degree const & ideal) { ideal.display(out); return out; }
+        void display(std::ostream & out) const;
+        friend std::ostream & operator<<(std::ostream & out, var2degree const & ideal) { ideal.display(out); return out; }
     };
 
     template<typename ValManager, typename Value = typename ValManager::numeral>
@@ -98,7 +99,7 @@ namespace polynomial {
     };
 
     struct display_var_proc {
-        virtual void operator()(std::ostream & out, var x) const { out << "x" << x; }
+        virtual std::ostream& operator()(std::ostream & out, var x) const { return out << "x" << x; }
     };
 
     class polynomial;
@@ -306,11 +307,26 @@ namespace polynomial {
            \brief Return true if m is linear (i.e., it is of the form 1 or x).
         */
         static bool is_linear(monomial const * m);
-        
+       
         /**
            \brief Return true if all monomials in p are linear.
         */
         static bool is_linear(polynomial const * p);
+
+        /**
+           \brief Return true if the monomial is a variable.
+        */
+        static bool is_var(monomial const* p, var& v);
+
+        /**
+           \brief Return true if the polynomial is a variable.
+        */
+        bool is_var(polynomial const* p, var& v);
+
+        /**
+           \brief Return true if the polynomial is of the form x + k
+        */
+        bool is_var_num(polynomial const* p, var& v, scoped_numeral& n);
 
         /**
            \brief Return the degree of variable x in p.
@@ -860,7 +876,13 @@ namespace polynomial {
            \brief Return true if p is a square, and store its square root in r.
         */
         bool sqrt(polynomial const * p, polynomial_ref & r);
-        
+       
+
+        /**
+           \brief obtain the sign of the polynomial given sign of variables.
+        */
+        lbool sign(polynomial const* p, svector<lbool> const& sign_of_vars);
+ 
         /**
            \brief Return true if p is always positive for any assignment of its variables.
            
@@ -935,6 +957,13 @@ namespace polynomial {
         polynomial * substitute(polynomial const * p, var x, numeral const & v) {
             return substitute(p, 1, &x, &v);
         }
+
+        /**
+           \brief Apply substiution [x -> p/q] in r.
+           That is, given r \in Z[x, y_1, .., y_m] return
+           polynomial q^k * r(p/q, y_1, .., y_m), where k is the maximal degree of x in r.
+        */
+        void substitute(polynomial const* r, var x, polynomial const* p, polynomial const* q, polynomial_ref& result);
 
         /**
            \brief Factorize the given polynomial p and store its factors in r.

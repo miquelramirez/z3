@@ -19,16 +19,16 @@ Revision History:
 #ifndef THEORY_SEQ_H_
 #define THEORY_SEQ_H_
 
-#include "smt_theory.h"
-#include "seq_decl_plugin.h"
-#include "theory_seq_empty.h"
-#include "th_rewriter.h"
-#include "ast_trail.h"
-#include "scoped_vector.h"
-#include "scoped_ptr_vector.h"
-#include "automaton.h"
-#include "seq_rewriter.h"
-#include "union_find.h"
+#include "smt/smt_theory.h"
+#include "ast/seq_decl_plugin.h"
+#include "smt/theory_seq_empty.h"
+#include "ast/rewriter/th_rewriter.h"
+#include "ast/ast_trail.h"
+#include "util/scoped_vector.h"
+#include "util/scoped_ptr_vector.h"
+#include "math/automata/automaton.h"
+#include "ast/rewriter/seq_rewriter.h"
+#include "util/union_find.h"
 
 namespace smt {
 
@@ -45,7 +45,7 @@ namespace smt {
         typedef trail_stack<theory_seq> th_trail_stack;
         typedef std::pair<expr*, dependency*> expr_dep;
         typedef obj_map<expr, expr_dep> eqdep_map_t; 
-	typedef union_find<theory_seq> th_union_find;
+        typedef union_find<theory_seq> th_union_find;
 
         class seq_value_proc;
 
@@ -298,8 +298,8 @@ namespace smt {
         scoped_vector<eq>          m_eqs;        // set of current equations.
         scoped_vector<ne>          m_nqs;        // set of current disequalities.
         scoped_vector<nc>          m_ncs;        // set of non-contains constraints.
-        unsigned                   m_eq_id;	
-	th_union_find              m_find;
+        unsigned                   m_eq_id;
+        th_union_find              m_find;
 
         seq_factory*               m_factory;    // value factory
         exclusion_table            m_exclude;    // set of asserted disequalities.
@@ -328,6 +328,7 @@ namespace smt {
         // maintain automata with regular expressions.
         scoped_ptr_vector<eautomaton>  m_automata;
         obj_map<expr, eautomaton*>     m_re2aut;
+        expr_ref_vector                m_res;
 
         // queue of asserted atoms
         ptr_vector<expr>               m_atoms;
@@ -341,9 +342,9 @@ namespace smt {
 
         virtual void init(context* ctx);
         virtual final_check_status final_check_eh();
-        virtual bool internalize_atom(app* atom, bool) { return internalize_term(atom); }
-        virtual bool internalize_term(app*);
-        virtual void internalize_eq_eh(app * atom, bool_var v) {}
+        virtual bool internalize_atom(app* atom, bool);
+        virtual bool internalize_term(app*);        
+        virtual void internalize_eq_eh(app * atom, bool_var v);
         virtual void new_eq_eh(theory_var, theory_var);
         virtual void new_diseq_eh(theory_var, theory_var);
         virtual void assign_eh(bool_var v, bool is_true);        
@@ -361,6 +362,7 @@ namespace smt {
         virtual void collect_statistics(::statistics & st) const;
         virtual model_value_proc * mk_value(enode * n, model_generator & mg);
         virtual void init_model(model_generator & mg);
+        virtual void init_search_eh();
 
         void init_model(expr_ref_vector const& es);
         // final check 
@@ -387,6 +389,7 @@ namespace smt {
                            vector<rational> const& ll, vector<rational> const& rl);
         bool set_empty(expr* x);
         bool is_complex(eq const& e);
+        bool internalize_re(expr* e);
 
         bool check_extensionality();
         bool check_contains();
@@ -407,6 +410,8 @@ namespace smt {
         expr_ref mk_empty(sort* s) { return expr_ref(m_util.str.mk_empty(s), m); }
         expr_ref mk_concat(unsigned n, expr*const* es) { return expr_ref(m_util.str.mk_concat(n, es), m); }
         expr_ref mk_concat(expr_ref_vector const& es, sort* s) { if (es.empty()) return mk_empty(s); return mk_concat(es.size(), es.c_ptr()); }
+        expr_ref mk_concat(expr_ref_vector const& es) { SASSERT(!es.empty());  return mk_concat(es.size(), es.c_ptr()); }
+        expr_ref mk_concat(ptr_vector<expr> const& es) { SASSERT(!es.empty()); return mk_concat(es.size(), es.c_ptr()); }
         expr_ref mk_concat(expr* e1, expr* e2) { return expr_ref(m_util.str.mk_concat(e1, e2), m); }
         expr_ref mk_concat(expr* e1, expr* e2, expr* e3) { return expr_ref(m_util.str.mk_concat(e1, e2, e3), m); }
         bool solve_nqs(unsigned i);
@@ -428,12 +433,14 @@ namespace smt {
         bool explain_empty(expr_ref_vector& es, dependency*& dep);
 
         // asserting consequences
-        void linearize(dependency* dep, enode_pair_vector& eqs, literal_vector& lits) const;
+        bool linearize(dependency* dep, enode_pair_vector& eqs, literal_vector& lits) const;
         void propagate_lit(dependency* dep, literal lit) { propagate_lit(dep, 0, 0, lit); }
         void propagate_lit(dependency* dep, unsigned n, literal const* lits, literal lit);
         void propagate_eq(dependency* dep, enode* n1, enode* n2);
         void propagate_eq(literal lit, expr* e1, expr* e2, bool add_to_eqs);
-        void propagate_eq(dependency* dep, literal_vector const& lits, expr* e1, expr* e2, bool add_to_eqs);
+        void propagate_eq(dependency* dep, literal_vector const& lits, expr* e1, expr* e2, bool add_to_eqs = true);
+        void propagate_eq(dependency* dep, expr* e1, expr* e2, bool add_to_eqs = true);
+        void propagate_eq(dependency* dep, literal lit, expr* e1, expr* e2, bool add_to_eqs = true);
         void set_conflict(dependency* dep, literal_vector const& lits = literal_vector());
 
         u_map<unsigned> m_branch_start;
@@ -449,17 +456,22 @@ namespace smt {
         bool is_var(expr* b);
         bool add_solution(expr* l, expr* r, dependency* dep);
         bool is_nth(expr* a) const;
+        bool is_nth(expr* a, expr*& e1, expr*& e2) const;
         bool is_tail(expr* a, expr*& s, unsigned& idx) const;
         bool is_eq(expr* e, expr*& a, expr*& b) const; 
         bool is_pre(expr* e, expr*& s, expr*& i);
         bool is_post(expr* e, expr*& s, expr*& i);
+        expr_ref mk_sk_ite(expr* c, expr* t, expr* f);
         expr_ref mk_nth(expr* s, expr* idx);
         expr_ref mk_last(expr* e);
         expr_ref mk_first(expr* e);
         expr_ref canonize(expr* e, dependency*& eqs);
         bool canonize(expr* e, expr_ref_vector& es, dependency*& eqs);
         bool canonize(expr_ref_vector const& es, expr_ref_vector& result, dependency*& eqs);
+        ptr_vector<expr> m_expand_todo;
         expr_ref expand(expr* e, dependency*& eqs);
+        expr_ref expand1(expr* e, dependency*& eqs);
+        expr_ref try_expand(expr* e, dependency*& eqs);
         void add_dependency(dependency*& dep, enode* a, enode* b);
 
         void get_concat(expr* e, ptr_vector<expr>& concats);
@@ -497,8 +509,11 @@ namespace smt {
         void add_in_re_axiom(expr* n);
         bool add_stoi_axiom(expr* n);
         bool add_itos_axiom(expr* n);
+        literal is_digit(expr* ch);
+        expr_ref digit2int(expr* ch);
         void add_itos_length_axiom(expr* n);
         literal mk_literal(expr* n);
+        literal mk_simplified_literal(expr* n);
         literal mk_eq_empty(expr* n, bool phase = true);
         literal mk_seq_eq(expr* a, expr* b);
         void tightest_prefix(expr* s, expr* x);
@@ -510,7 +525,7 @@ namespace smt {
 
 
         // arithmetic integration
-        bool get_value(expr* s, rational& val) const;
+        bool get_num_value(expr* s, rational& val) const;
         bool lower_bound(expr* s, rational& lo) const;
         bool upper_bound(expr* s, rational& hi) const;
         bool get_length(expr* s, rational& val) const;
@@ -566,6 +581,7 @@ namespace smt {
         void display_disequation(std::ostream& out, ne const& e) const;
         void display_deps(std::ostream& out, dependency* deps) const;
         void display_deps(std::ostream& out, literal_vector const& lits, enode_pair_vector const& eqs) const;
+        void display_nc(std::ostream& out, nc const& nc) const;
     public:
         theory_seq(ast_manager& m);
         virtual ~theory_seq();
@@ -573,7 +589,7 @@ namespace smt {
         // model building
         app* mk_value(app* a);
 
-	th_trail_stack& get_trail_stack() { return m_trail_stack; }
+        th_trail_stack& get_trail_stack() { return m_trail_stack; }
         void merge_eh(theory_var, theory_var, theory_var v1, theory_var v2) {}
         void after_merge_eh(theory_var r1, theory_var r2, theory_var v1, theory_var v2) { }
         void unmerge_eh(theory_var v1, theory_var v2) {}

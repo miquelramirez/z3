@@ -20,23 +20,23 @@ Notes:
 
 --*/
 
-#include "smt_kernel.h"
-#include "qe_mbp.h"
-#include "smt_params.h"
-#include "ast_util.h"
-#include "quant_hoist.h"
-#include "ast_pp.h" 
-#include "model_v2_pp.h"
-#include "qsat.h"
-#include "expr_abstract.h"
-#include "qe.h"
-#include "label_rewriter.h"
-#include "expr_replacer.h"
-#include "th_rewriter.h"
-#include "model_evaluator.h"
-#include "smt_solver.h"
-#include "solver.h"
-#include "mus.h"
+#include "ast/expr_abstract.h"
+#include "ast/ast_util.h"
+#include "ast/rewriter/quant_hoist.h"
+#include "ast/ast_pp.h"
+#include "ast/rewriter/th_rewriter.h"
+#include "ast/rewriter/expr_replacer.h"
+#include "model/model_v2_pp.h"
+#include "model/model_evaluator.h"
+#include "smt/smt_kernel.h"
+#include "smt/params/smt_params.h"
+#include "smt/smt_solver.h"
+#include "solver/solver.h"
+#include "solver/mus.h"
+#include "qe/qsat.h"
+#include "qe/qe_mbp.h"
+#include "qe/qe.h"
+#include "ast/rewriter/label_rewriter.h"
 
 namespace qe {
 
@@ -626,6 +626,9 @@ namespace qe {
                     SASSERT(validate_assumptions(*m_model.get(), asms));
                     SASSERT(validate_model(asms));
                     TRACE("qe", s.display(tout); display(tout << "\n", *m_model.get()); display(tout, asms); );
+                    if (m_level == 0) {
+                        m_model_save = m_model;
+                    }
                     push();
                     if (m_level == 1 && m_mode == qsat_maximize) {
                         maximize_model();
@@ -909,6 +912,7 @@ namespace qe {
                 num_scopes = 2;
             }
             else {
+                if (level.max() + 2 > m_level) return false;
                 SASSERT(level.max() + 2 <= m_level);
                 num_scopes = m_level - level.max();
                 SASSERT(num_scopes >= 2);
@@ -1273,7 +1277,7 @@ namespace qe {
                 in->inc_depth();
                 result.push_back(in.get());
                 if (in->models_enabled()) {
-                    mc = model2model_converter(m_model.get());
+                    mc = model2model_converter(m_model_save.get());
                     mc = concat(m_pred_abs.fmc(), mc.get());
                 }
                 break;

@@ -20,11 +20,11 @@ Notes:
 #ifndef OPT_SLS_SOLVER_H_
 #define OPT_SLS_SOLVER_H_
 
-#include "solver_na2as.h"
-#include "card2bv_tactic.h"
-#include "nnf_tactic.h"
-#include "pb_sls.h"
-#include "bvsls_opt_engine.h"
+#include "solver/solver_na2as.h"
+#include "tactic/arith/card2bv_tactic.h"
+#include "tactic/core/nnf_tactic.h"
+#include "opt/pb_sls.h"
+#include "tactic/sls/bvsls_opt_engine.h"
 
 
 namespace opt {
@@ -89,19 +89,6 @@ namespace opt {
         }
         virtual void get_labels(svector<symbol> & r) {
             m_solver->get_labels(r);
-        }
-        virtual void set_cancel(bool f) {
-            m_solver->set_cancel(f);
-            m_pb2bv.set_cancel(f);
-            #pragma omp critical (sls_solver)
-            {
-                if (m_bvsls) {
-                    m_bvsls->set_cancel(f);
-                }
-                if (m_pbsls) {
-                    m_pbsls->set_cancel(f);
-                }
-            }
         }
         virtual void set_progress_callback(progress_callback * callback) {
             m_solver->set_progress_callback(callback);
@@ -203,14 +190,11 @@ namespace opt {
         }
 
         void pbsls_opt(model_ref& mdl) {
-            #pragma omp critical (sls_solver)
-            {
-                if (m_pbsls) {
-                    m_pbsls->reset();
-                }
-                else {
-                    m_pbsls = alloc(smt::pb_sls, m);
-                }
+            if (m_pbsls) {
+                m_pbsls->reset();
+            }
+            else {
+                m_pbsls = alloc(smt::pb_sls, m);
             }
             m_pbsls->set_model(mdl);
             m_pbsls->updt_params(m_params);
@@ -226,10 +210,7 @@ namespace opt {
         }
 
         void bvsls_opt(model_ref& mdl) {
-            #pragma omp critical (sls_solver)
-            {
-                m_bvsls = alloc(bvsls_opt_engine, m, m_params);
-            }
+            m_bvsls = alloc(bvsls_opt_engine, m, m_params);            
             assertions2sls();
             expr_ref objective = soft2bv(m_soft, m_weights);
             TRACE("opt", tout << objective << "\n";);

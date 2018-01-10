@@ -27,12 +27,12 @@ Revision History:
 #ifndef SMT_KERNEL_H_
 #define SMT_KERNEL_H_
 
-#include"ast.h"
-#include"params.h"
-#include"model.h"
-#include"lbool.h"
-#include"statistics.h"
-#include"smt_failure.h"
+#include "ast/ast.h"
+#include "util/params.h"
+#include "model/model.h"
+#include "util/lbool.h"
+#include "util/statistics.h"
+#include "smt/smt_failure.h"
 
 struct smt_params;
 class progress_callback;
@@ -70,7 +70,8 @@ namespace smt {
            This method uses the "asserted" proof as a justification for e.
         */
         void assert_expr(expr * e);
-        
+
+        void assert_expr(expr_ref_vector const& es);
         /**
            \brief Assert the given assertion with the given proof as a justification.
         */
@@ -84,7 +85,12 @@ namespace smt {
         /**
            \brief Return the array of asserted formulas.
         */
-        expr * const * get_formulas() const;
+        void get_formulas(ptr_vector<expr>& r) const;
+
+        /**
+           \brief return the formula at index idx.
+        */
+        expr* get_formula(unsigned idx) const;
         
         /**
            \brief Create a backtracking point (aka scope level).
@@ -129,7 +135,18 @@ namespace smt {
         /**
            \brief extract consequences among variables.
         */
-        lbool get_consequences(expr_ref_vector const& assumptions, expr_ref_vector const& vars, expr_ref_vector& conseq);
+        lbool get_consequences(expr_ref_vector const& assumptions, expr_ref_vector const& vars, 
+                               expr_ref_vector& conseq, expr_ref_vector& unfixed);
+
+        /**
+          \brief find mutually exclusive variables.
+         */
+        lbool find_mutexes(expr_ref_vector const& vars, vector<expr_ref_vector>& mutexes);
+
+        /**
+           \brief Preferential SAT. 
+        */
+        lbool preferred_sat(expr_ref_vector const& asms, vector<expr_ref_vector>& cores);
 
         /**
            \brief Return the model associated with the last check command.

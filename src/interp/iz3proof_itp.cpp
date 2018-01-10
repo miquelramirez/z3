@@ -24,7 +24,7 @@
 #pragma warning(disable:4101)
 #endif
 
-#include "iz3proof_itp.h"
+#include "interp/iz3proof_itp.h"
 
 using namespace stl_ext;
 
@@ -55,7 +55,7 @@ class iz3proof_itp_impl : public iz3proof_itp {
 
     /* The summation rule. The term sum(p,c,i) takes a proof p of an
        inequality i', an integer coefficient c and an inequality i, and
-       yieds a proof of i' + ci. */
+       yields a proof of i' + ci. */
     symb sum;
 
     /* Proof rotation. The proof term rotate(q,p) takes a
@@ -75,7 +75,7 @@ class iz3proof_itp_impl : public iz3proof_itp {
     symb leq2eq;
 
     /* Equality to inequality. eq2leq(p, q) takes a proof p of x=y, and
-       a proof q ~(x <= y) and and yields a proof of false. */
+       a proof q ~(x <= y) and yields a proof of false. */
     symb eq2leq;
 
     /* Proof term cong(p,q) takes a proof p of x=y and a proof
@@ -97,7 +97,7 @@ class iz3proof_itp_impl : public iz3proof_itp {
 
     /* This oprerator represents a concatenation of rewrites.  The term
        a=b;c=d represents an A rewrite from a to b, followed by a B
-       rewrite fron b to c, followed by an A rewrite from c to d.
+       rewrite from b to c, followed by an A rewrite from c to d.
     */
     symb concat;
 
@@ -541,6 +541,7 @@ class iz3proof_itp_impl : public iz3proof_itp {
                 placeholder_arg |= is_placeholder(args[i]);
             }
             try {
+                TRACE("duality", print_expr(tout, e); tout << "\n";);
                 opr f = op(e);
                 if(f == Equal && args[0] == args[1]) res = mk_true();
                 else if(f == And) res = my_and(args);
@@ -853,6 +854,7 @@ class iz3proof_itp_impl : public iz3proof_itp {
 
     ast simplify_rotate_eq2leq(const ast &pl, const ast &neg_equality, const ast &pf){
         if(pl == arg(pf,1)){
+            TRACE("duality", print_expr(tout, pl); print_expr(tout << "\n", neg_equality); print_expr(tout << "\n", pf); tout << "\n";);
             ast cond = mk_true();
             ast equa = sep_cond(arg(pf,0),cond);
             if(is_equivrel_chain(equa)){
@@ -1540,7 +1542,7 @@ class iz3proof_itp_impl : public iz3proof_itp {
         return my_implies(arg(rew,1),arg(rew,2));
     }
   
-    // make rewrite rew conditon on rewrite cond 
+    // make rewrite rew condition on rewrite cond
     ast rewrite_conditional(const ast &cond, const ast &rew){
         ast cf = rewrite_to_formula(cond);
         return make(sym(rew),arg(rew,0),my_and(arg(rew,1),cf),arg(rew,2));
@@ -1870,10 +1872,13 @@ class iz3proof_itp_impl : public iz3proof_itp {
 
     ast chain_ineqs(opr comp_op, LitType t, const ast &chain, const ast &lhs, const ast &rhs){
         if(is_true(chain)){
-            if(lhs != rhs)
+            if (lhs != rhs) {
+                TRACE("duality", print_expr(tout, lhs); tout << " "; print_expr(tout, rhs); tout << "\n";);
                 throw bad_ineq_inference();
+            }
             return make(Leq,make_int(rational(0)),make_int(rational(0)));
         }
+        TRACE("duality", print_expr(tout, chain); print_expr(tout << "\n", lhs); tout << " "; print_expr(tout, rhs); tout << "\n";);
         ast last = chain_last(chain);
         ast rest = chain_rest(chain);
         ast mid = subst_in_pos(rhs,rewrite_pos(last),rewrite_lhs(last));
@@ -2963,9 +2968,9 @@ class iz3proof_itp_impl : public iz3proof_itp {
     ast interpolate(const node &pf){
         // proof of false must be a formula, with quantified symbols
 #ifndef BOGUS_QUANTS
-        return add_quants(z3_simplify(pf));
+        return close_universally(add_quants(z3_simplify(pf)));
 #else
-        return z3_simplify(pf);
+        return close_universally(z3_simplify(pf));
 #endif
     }
 

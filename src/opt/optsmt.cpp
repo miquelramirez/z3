@@ -29,15 +29,15 @@ Notes:
 --*/
 
 #include <typeinfo>
-#include "optsmt.h"
-#include "opt_solver.h"
-#include "arith_decl_plugin.h"
-#include "theory_arith.h"
-#include "ast_pp.h"
-#include "ast_util.h"
-#include "model_pp.h"
-#include "th_rewriter.h"
-#include "opt_params.hpp"
+#include "opt/optsmt.h"
+#include "opt/opt_solver.h"
+#include "ast/arith_decl_plugin.h"
+#include "smt/theory_arith.h"
+#include "ast/ast_pp.h"
+#include "ast/ast_util.h"
+#include "model/model_pp.h"
+#include "ast/rewriter/th_rewriter.h"
+#include "opt/opt_params.hpp"
 
 namespace opt {
 
@@ -161,6 +161,14 @@ namespace opt {
         return l_true;        
     }
 
+    bool optsmt::is_unbounded(unsigned obj_index, bool is_maximize) {
+        if (is_maximize) {
+            return !m_upper[obj_index].is_finite();
+        }
+        else {
+            return !m_lower[obj_index].is_finite();
+        }
+    }
 
     lbool optsmt::geometric_lex(unsigned obj_index, bool is_maximize) {
         arith_util arith(m);

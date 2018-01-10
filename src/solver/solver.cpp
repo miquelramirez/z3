@@ -16,10 +16,13 @@ Author:
 Notes:
 
 --*/
-#include"solver.h"
-#include"model_evaluator.h"
-#include"ast_util.h"
-#include"ast_pp.h"
+#include "solver/solver.h"
+#include "model/model_evaluator.h"
+#include "ast/ast_util.h"
+#include "ast/ast_pp.h"
+#include "ast/ast_pp_util.h"
+#include "util/common_msgs.h"
+
 
 unsigned solver::get_num_assertions() const {
     NOT_IMPLEMENTED_YET();
@@ -31,8 +34,15 @@ expr * solver::get_assertion(unsigned idx) const {
     return 0;
 }
 
-std::ostream& solver::display(std::ostream & out) const {
-    return out << "(solver)";
+std::ostream& solver::display(std::ostream & out, unsigned n, expr* const* assumptions) const {
+    expr_ref_vector fmls(get_manager());
+    get_assertions(fmls);
+    ast_pp_util visitor(get_manager());
+    visitor.collect(fmls);
+    visitor.collect(n, assumptions);
+    visitor.display_decls(out);
+    visitor.display_asserts(out, fmls, true);
+    return out;
 }
 
 void solver::get_assertions(expr_ref_vector& fmls) const {
@@ -49,7 +59,19 @@ struct scoped_assumption_push {
 };
 
 lbool solver::get_consequences(expr_ref_vector const& asms, expr_ref_vector const& vars, expr_ref_vector& consequences) {
-    return get_consequences_core(asms, vars, consequences);
+    try {
+        return get_consequences_core(asms, vars, consequences);
+    }
+    catch (z3_exception& ex) {
+        if (asms.get_manager().canceled()) {
+            set_reason_unknown(Z3_CANCELED_MSG);
+            return l_undef;
+        }
+        else {
+            set_reason_unknown(ex.msg());
+        }
+        throw;
+    }
 }
 
 lbool solver::get_consequences_core(expr_ref_vector const& asms, expr_ref_vector const& vars, expr_ref_vector& consequences) {
@@ -69,6 +91,7 @@ lbool solver::get_consequences_core(expr_ref_vector const& asms, expr_ref_vector
         tmp = vars[i];
         val = eval(tmp);
         if (!m.is_value(val)) {
+            // vars[i] is unfixed
             continue;
         }
         if (m.is_bool(tmp) && is_uninterp_const(tmp)) {
@@ -81,6 +104,7 @@ lbool solver::get_consequences_core(expr_ref_vector const& asms, expr_ref_vector
                 lit = m.mk_not(tmp);
             }
             else {
+                // vars[i] is unfixed
                 continue;
             }
             scoped_assumption_push _scoped_push(asms1, nlit);
@@ -89,6 +113,7 @@ lbool solver::get_consequences_core(expr_ref_vector const& asms, expr_ref_vector
             case l_undef: 
                 return is_sat;
             case l_true:
+                // vars[i] is unfixed
                 break;
             case l_false:
                 get_unsat_core(core);
@@ -114,6 +139,7 @@ lbool solver::get_consequences_core(expr_ref_vector const& asms, expr_ref_vector
             case l_undef: 
                 return is_sat;
             case l_true:
+                // vars[i] is unfixed
                 break;
             case l_false:
                 get_unsat_core(core);
@@ -124,3 +150,16 @@ lbool solver::get_consequences_core(expr_ref_vector const& asms, expr_ref_vector
     }
     return l_true;
 }
+
+lbool solver::find_mutexes(expr_ref_vector const& vars, vector<expr_ref_vector>& mutexes) {
+    return l_true;
+}
+
+lbool solver::preferred_sat(expr_ref_vector const& asms, vector<expr_ref_vector>& cores) {
+    return check_sat(0, 0);
+}
+
+bool solver::is_literal(ast_manager& m, expr* e) {
+    return is_uninterp_const(e) || (m.is_not(e, e) && is_uninterp_const(e));
+}
+

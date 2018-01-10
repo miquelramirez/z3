@@ -19,11 +19,10 @@ Author:
 Notes:
 
 --*/
-#include"solver_na2as.h"
-#include"tactic.h"
-#include"ast_pp_util.h"
-#include"ast_translation.h"
-#include"mus.h"
+#include "solver/solver_na2as.h"
+#include "tactic/tactic.h"
+#include "ast/ast_translation.h"
+#include "solver/mus.h"
 
 /**
    \brief Simulates the incremental solver interface using a tactic.
@@ -38,7 +37,6 @@ class tactic2solver : public solver_na2as {
     ref<simple_check_sat_result> m_result;
     tactic_ref                   m_tactic;
     symbol                       m_logic;
-    params_ref                   m_params;
     bool                         m_produce_models;
     bool                         m_produce_proofs;
     bool                         m_produce_unsat_cores;
@@ -75,11 +73,10 @@ public:
     virtual unsigned get_num_assertions() const;
     virtual expr * get_assertion(unsigned idx) const;
 
-    virtual std::ostream& display(std::ostream & out) const;
-    virtual ast_manager& get_manager(); 
+    virtual ast_manager& get_manager() const; 
 };
 
-ast_manager& tactic2solver::get_manager() { return m_assertions.get_manager(); }
+ast_manager& tactic2solver::get_manager() const { return m_assertions.get_manager(); }
 
 tactic2solver::tactic2solver(ast_manager & m, tactic * t, params_ref const & p, bool produce_proofs, bool produce_models, bool produce_unsat_cores, symbol const & logic):
     solver_na2as(m),
@@ -87,7 +84,7 @@ tactic2solver::tactic2solver(ast_manager & m, tactic * t, params_ref const & p, 
 
     m_tactic = t;
     m_logic  = logic;
-    m_params = p;
+    solver::updt_params(p);
     
     m_produce_models      = produce_models;
     m_produce_proofs      = produce_proofs;
@@ -98,7 +95,7 @@ tactic2solver::~tactic2solver() {
 }
 
 void tactic2solver::updt_params(params_ref const & p) {
-    m_params = p;
+    solver::updt_params(p);
 }
 
 void tactic2solver::collect_param_descrs(param_descrs & r) {
@@ -131,7 +128,7 @@ lbool tactic2solver::check_sat_core(unsigned num_assumptions, expr * const * ass
     m_result = alloc(simple_check_sat_result, m);
     m_tactic->cleanup();
     m_tactic->set_logic(m_logic);
-    m_tactic->updt_params(m_params); // parameters are allowed to overwrite logic.
+    m_tactic->updt_params(get_params()); // parameters are allowed to overwrite logic.
     goal_ref g = alloc(goal, m, m_produce_proofs, m_produce_models, m_produce_unsat_cores);
 
     unsigned sz = m_assertions.size();
@@ -139,15 +136,18 @@ lbool tactic2solver::check_sat_core(unsigned num_assumptions, expr * const * ass
         g->assert_expr(m_assertions.get(i));
     }
     for (unsigned i = 0; i < num_assumptions; i++) {
-        g->assert_expr(assumptions[i], m.mk_asserted(assumptions[i]), m.mk_leaf(assumptions[i]));
+        proof_ref pr(m.mk_asserted(assumptions[i]), m);
+        expr_dependency_ref ans(m.mk_leaf(assumptions[i]), m);    
+        g->assert_expr(assumptions[i], pr, ans);
     }
 
     model_ref           md;
     proof_ref           pr(m);
     expr_dependency_ref core(m);
     std::string         reason_unknown = "unknown";
+    labels_vec labels;
     try {
-        switch (::check_sat(*m_tactic, g, md, pr, core, reason_unknown)) {
+        switch (::check_sat(*m_tactic, g, md, labels, pr, core, reason_unknown)) {
         case l_true: 
             m_result->set_status(l_true);
             break;
@@ -162,6 +162,7 @@ lbool tactic2solver::check_sat_core(unsigned num_assumptions, expr * const * ass
         }
     }
     catch (z3_error & ex) {
+        TRACE("tactic2solver", tout << "exception: " << ex.msg() << "\n";);
         throw ex;
     }
     catch (z3_exception & ex) {
@@ -243,22 +244,6 @@ expr * tactic2solver::get_assertion(unsigned idx) const {
     return m_assertions.get(idx);
 }
 
-std::ostream& tactic2solver::display(std::ostream & out) const {
-    ast_pp_util visitor(m_assertions.m());
-    visitor.collect(m_assertions);
-    visitor.display_decls(out);
-    visitor.display_asserts(out, m_assertions, true);
-#if 0
-    ast_manager & m = m_assertions.m();
-    unsigned num = m_assertions.size();
-    out << "(solver";
-    for (unsigned i = 0; i < num; i++) {
-        out << "\n  " << mk_ismt2_pp(m_assertions.get(i), m, 2);
-    }
-    out << ")";
-#endif
-    return out;
-}
 
 solver * mk_tactic2solver(ast_manager & m, 
                           tactic * t, 
@@ -304,3 +289,5 @@ solver_factory * mk_tactic2solver_factory(tactic * t) {
 solver_factory * mk_tactic_factory2solver_factory(tactic_factory * f) {
     return alloc(tactic_factory2solver_factory, f);
 }
+
+

@@ -19,8 +19,9 @@ Author:
 Notes:
 
 --*/
-#include"solver_na2as.h"
-#include"ast_smt2_pp.h"
+#include "solver/solver_na2as.h"
+#include "ast/ast_smt2_pp.h"
+
 
 solver_na2as::solver_na2as(ast_manager & m):
     m(m), 
@@ -62,6 +63,7 @@ struct append_assumptions {
 
 lbool solver_na2as::check_sat(unsigned num_assumptions, expr * const * assumptions) {
     append_assumptions app(m_assumptions, num_assumptions, assumptions);
+    TRACE("solver_na2as", display(tout););
     return check_sat_core(m_assumptions.size(), m_assumptions.c_ptr());
 }
 
@@ -69,6 +71,11 @@ lbool solver_na2as::get_consequences(expr_ref_vector const& asms, expr_ref_vecto
     append_assumptions app(m_assumptions, asms.size(), asms.c_ptr());
     return get_consequences_core(m_assumptions, vars, consequences);
 }
+
+lbool solver_na2as::find_mutexes(expr_ref_vector const& vars, vector<expr_ref_vector>& mutexes) {
+    return l_true;
+}
+
 
 void solver_na2as::push() {
     m_scopes.push_back(m_assumptions.size());

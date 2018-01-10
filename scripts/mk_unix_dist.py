@@ -1,7 +1,7 @@
 ############################################
 # Copyright (c) 2013 Microsoft Corporation
-# 
-# Scripts for automatically generating 
+#
+# Scripts for automatically generating
 # Linux/OSX/BSD distribution zip files.
 #
 # Author: Leonardo de Moura (leonardo)
@@ -26,6 +26,8 @@ DOTNET_ENABLED=True
 DOTNET_KEY_FILE=None
 JAVA_ENABLED=True
 GIT_HASH=False
+PYTHON_ENABLED=True
+MAKEJOBS=getenv("MAKEJOBS", '8')
 
 def set_verbose(flag):
     global VERBOSE
@@ -40,7 +42,7 @@ def mk_dir(d):
 
 def set_build_dir(path):
     global BUILD_DIR
-    BUILD_DIR = path
+    BUILD_DIR = mk_util.norm_path(path)
     mk_dir(BUILD_DIR)
 
 def display_help():
@@ -55,6 +57,7 @@ def display_help():
     print("  --nodotnet                    do not include .NET bindings in the binary distribution files.")
     print("  --dotnet-key=<file>           sign the .NET assembly with the private key in <file>.")
     print("  --nojava                      do not include Java bindings in the binary distribution files.")
+    print("  --nopython                    do not include Python bindings in the binary distribution files.")
     print("  --githash                     include git hash in the Zip file.")
     exit(0)
 
@@ -62,14 +65,15 @@ def display_help():
 def parse_options():
     global FORCE_MK, JAVA_ENABLED, GIT_HASH, DOTNET_ENABLED, DOTNET_KEY_FILE
     path = BUILD_DIR
-    options, remainder = getopt.gnu_getopt(sys.argv[1:], 'b:hsf', ['build=', 
+    options, remainder = getopt.gnu_getopt(sys.argv[1:], 'b:hsf', ['build=',
                                                                    'help',
                                                                    'silent',
                                                                    'force',
                                                                    'nojava',
                                                                    'nodotnet',
                                                                    'dotnet-key=',
-                                                                   'githash'
+                                                                   'githash',
+                                                                   'nopython'
                                                                    ])
     for opt, arg in options:
         if opt in ('-b', '--build'):
@@ -84,6 +88,8 @@ def parse_options():
             FORCE_MK = True
         elif opt == '--nodotnet':
             DOTNET_ENABLED = False
+        elif opt == '--nopython':
+            PYTHON_ENABLED = False
         elif opt == '--dotnet-key':
             DOTNET_KEY_FILE = arg
         elif opt == '--nojava':
@@ -111,9 +117,11 @@ def mk_build_dir(path):
         if GIT_HASH:
             opts.append('--githash=%s' % mk_util.git_hash())
             opts.append('--git-describe')
+        if PYTHON_ENABLED:
+            opts.append('--python')
         if subprocess.call(opts) != 0:
             raise MKException("Failed to generate build directory at '%s'" % path)
-    
+
 # Create build directories
 def mk_build_dirs():
     mk_build_dir(BUILD_DIR)
@@ -132,7 +140,7 @@ class cd:
 def mk_z3():
     with cd(BUILD_DIR):
         try:
-            return subprocess.call(['make', '-j', '8'])
+            return subprocess.call(['make', '-j', MAKEJOBS])
         except:
             return 1
 
@@ -181,6 +189,7 @@ def mk_dist_dir():
     mk_util.DOTNET_ENABLED = DOTNET_ENABLED
     mk_util.DOTNET_KEY_FILE = DOTNET_KEY_FILE
     mk_util.JAVA_ENABLED = JAVA_ENABLED
+    mk_util.PYTHON_ENABLED = PYTHON_ENABLED
     mk_unix_dist(build_path, dist_path)
     if is_verbose():
         print("Generated distribution folder at '%s'" % dist_path)

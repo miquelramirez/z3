@@ -20,37 +20,36 @@ Revision History:
 --*/
 
 
-#include"rel_context.h"
-#include"stopwatch.h"
-#include"dl_context.h"
-#include"dl_compiler.h"
-#include"dl_instruction.h"
-#include"dl_mk_explanations.h"
-#include"dl_mk_magic_sets.h"
-#include"dl_product_relation.h"
-#include"dl_bound_relation.h"
-#include"dl_interval_relation.h"
-#include"karr_relation.h"
-#include"dl_finite_product_relation.h"
-#include"udoc_relation.h"
-#include"check_relation.h"
-#include"dl_lazy_table.h"
-#include"dl_sparse_table.h"
-#include"dl_table.h"
-#include"dl_table_relation.h"
-#include"aig_exporter.h"
-#include"dl_mk_simple_joins.h"
-#include"dl_mk_similarity_compressor.h"
-#include"dl_mk_unbound_compressor.h"
-#include"dl_mk_subsumption_checker.h"
-#include"dl_mk_partial_equiv.h"
-#include"dl_mk_coi_filter.h"
-#include"dl_mk_filter_rules.h"
-#include"dl_mk_rule_inliner.h"
-#include"dl_mk_interp_tail_simplifier.h"
-#include"dl_mk_bit_blast.h"
-#include"dl_mk_separate_negated_tails.h"
-#include"ast_util.h"
+#include "muz/rel/rel_context.h"
+#include "util/stopwatch.h"
+#include "muz/base/dl_context.h"
+#include "muz/rel/dl_compiler.h"
+#include "muz/rel/dl_instruction.h"
+#include "muz/rel/dl_mk_explanations.h"
+#include "muz/transforms/dl_mk_magic_sets.h"
+#include "muz/rel/dl_product_relation.h"
+#include "muz/rel/dl_bound_relation.h"
+#include "muz/rel/dl_interval_relation.h"
+#include "muz/rel/karr_relation.h"
+#include "muz/rel/dl_finite_product_relation.h"
+#include "muz/rel/udoc_relation.h"
+#include "muz/rel/check_relation.h"
+#include "muz/rel/dl_lazy_table.h"
+#include "muz/rel/dl_sparse_table.h"
+#include "muz/rel/dl_table.h"
+#include "muz/rel/dl_table_relation.h"
+#include "muz/rel/aig_exporter.h"
+#include "muz/rel/dl_mk_simple_joins.h"
+#include "muz/rel/dl_mk_similarity_compressor.h"
+#include "muz/transforms/dl_mk_unbound_compressor.h"
+#include "muz/transforms/dl_mk_subsumption_checker.h"
+#include "muz/transforms/dl_mk_coi_filter.h"
+#include "muz/transforms/dl_mk_filter_rules.h"
+#include "muz/transforms/dl_mk_rule_inliner.h"
+#include "muz/transforms/dl_mk_interp_tail_simplifier.h"
+#include "muz/transforms/dl_mk_bit_blast.h"
+#include "muz/transforms/dl_mk_separate_negated_tails.h"
+#include "ast/ast_util.h"
 
 
 namespace datalog {
@@ -108,7 +107,6 @@ namespace datalog {
         rm.register_plugin(alloc(sparse_table_plugin, rm));
         rm.register_plugin(alloc(hashtable_table_plugin, rm));
         rm.register_plugin(alloc(bitvector_table_plugin, rm));
-        rm.register_plugin(alloc(equivalence_table_plugin, rm));
         rm.register_plugin(lazy_table_plugin::mk_sparse(rm));
 
         // register plugins for builtin relations
@@ -308,7 +306,6 @@ namespace datalog {
             transf.register_plugin(alloc(mk_similarity_compressor, m_context)); 
         }
         transf.register_plugin(alloc(mk_rule_inliner, m_context));
-        transf.register_plugin(alloc(mk_partial_equivalence_transformer, m_context));
         transf.register_plugin(alloc(mk_interp_tail_simplifier, m_context));
         transf.register_plugin(alloc(mk_separate_negated_tails, m_context));
 

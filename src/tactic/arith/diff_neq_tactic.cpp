@@ -20,10 +20,10 @@ Author:
 Revision History:
 
 --*/
-#include"tactical.h"
-#include"arith_decl_plugin.h"
-#include"ast_smt2_pp.h"
-#include"model.h"
+#include "tactic/tactical.h"
+#include "ast/arith_decl_plugin.h"
+#include "ast/ast_smt2_pp.h"
+#include "model/model.h"
 
 class diff_neq_tactic : public tactic {
     struct imp {
@@ -95,13 +95,13 @@ class diff_neq_tactic : public tactic {
             if (is_uninterp_const(lhs) && u.is_numeral(rhs, k) && m_max_neg_k <= k && k <= m_max_k) {
                 var x  = mk_var(lhs);
                 int _k = static_cast<int>(k.get_int64());
-                m_upper[x] = _k;
+                m_upper[x] = std::min(m_upper[x], _k);
                 
             }
             else if (is_uninterp_const(rhs) && u.is_numeral(lhs, k) && m_max_neg_k <= k && k <= m_max_k) {
                 var x  = mk_var(rhs);
                 int _k = static_cast<int>(k.get_int64()); 
-                m_lower[x] = _k;
+                m_lower[x] = std::max(m_lower[x], _k);
             }
             else {
                 throw_not_supported();
@@ -312,11 +312,11 @@ class diff_neq_tactic : public tactic {
             return md;
         }
 
-        virtual void operator()(goal_ref const & g, 
-                                goal_ref_buffer & result, 
-                                model_converter_ref & mc, 
-                                proof_converter_ref & pc,
-                                expr_dependency_ref & core) {
+        void operator()(goal_ref const & g, 
+                        goal_ref_buffer & result, 
+                        model_converter_ref & mc, 
+                        proof_converter_ref & pc,
+                        expr_dependency_ref & core) {
             SASSERT(g->is_well_sorted());
             m_produce_models = g->models_enabled();
             mc = 0; pc = 0; core = 0; result.reset();

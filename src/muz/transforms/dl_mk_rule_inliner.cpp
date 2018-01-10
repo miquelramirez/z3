@@ -48,11 +48,11 @@ Subsumption transformation (remove rule):
 
 
 #include <sstream>
-#include "ast_pp.h"
-#include "rewriter.h"
-#include "rewriter_def.h"
-#include "dl_mk_rule_inliner.h"
-#include "fixedpoint_params.hpp"
+#include "ast/ast_pp.h"
+#include "ast/rewriter/rewriter.h"
+#include "ast/rewriter/rewriter_def.h"
+#include "muz/transforms/dl_mk_rule_inliner.h"
+#include "muz/base/fixedpoint_params.hpp"
 
 namespace datalog {
 
@@ -114,7 +114,10 @@ namespace datalog {
         apply(src, false, UINT_MAX,   tail, tail_neg);
         mk_rule_inliner::remove_duplicate_tails(tail, tail_neg);
         SASSERT(tail.size()==tail_neg.size());
-        res = m_rm.mk(new_head, tail.size(), tail.c_ptr(), tail_neg.c_ptr(), tgt.name(), m_normalize);
+        std::ostringstream comb_name;
+        comb_name << tgt.name().str() << ";" << src.name().str();
+        symbol combined_rule_name = symbol(comb_name.str().c_str());
+        res = m_rm.mk(new_head, tail.size(), tail.c_ptr(), tail_neg.c_ptr(), combined_rule_name, m_normalize);
         res->set_accounting_parent_object(m_context, const_cast<rule*>(&tgt));
         TRACE("dl",
               tgt.display(m_context,  tout << "tgt (" << tail_index << "): \n");
@@ -423,7 +426,7 @@ namespace datalog {
 
         for (unsigned i = 0; i < m_inlined_rules.get_num_rules(); ++i) {
             rule* r = m_inlined_rules.get_rule(i);
-            datalog::del_rule(m_mc, *r);
+            datalog::del_rule(m_mc, *r, true);
         }
     }
 
@@ -462,7 +465,7 @@ namespace datalog {
             }
         }
         if (modified) {
-            datalog::del_rule(m_mc, *r0);
+            datalog::del_rule(m_mc, *r0, true);
         }
 
         return modified;
@@ -485,9 +488,9 @@ namespace datalog {
         }
 
         if (something_done && m_mc) {
-            for (rule_set::iterator rit = orig.begin(); rit!=rend; ++rit) {
-                if (inlining_allowed(orig, (*rit)->get_decl())) {
-                    datalog::del_rule(m_mc, **rit);
+            for (rule* r : orig) {
+                if (inlining_allowed(orig, r->get_decl())) {
+                    datalog::del_rule(m_mc, *r, true);
                 }
             }
         }
@@ -577,7 +580,7 @@ namespace datalog {
                 // nothing unifies with the tail atom, therefore the rule is unsatisfiable
                 // (we can say this because relation pred doesn't have any ground facts either)
                 res = 0;
-                datalog::del_rule(m_mc, *r);
+                datalog::del_rule(m_mc, *r, false);
                 return true;
             }
             if (!is_oriented_rewriter(inlining_candidate, strat)) {
@@ -587,7 +590,7 @@ namespace datalog {
                 goto process_next_tail;
             }
             if (!try_to_inline_rule(*r, *inlining_candidate, ti, res)) {
-                datalog::del_rule(m_mc, *r);
+                datalog::del_rule(m_mc, *r, false);
                 res = 0;
             }
             return true;
@@ -820,7 +823,7 @@ namespace datalog {
                 if (num_tail_unifiers == 1) {
                     TRACE("dl", tout << "setting invalid: " << j << "\n";);
                     valid.set(j, false);
-                    datalog::del_rule(m_mc, *r2);
+                    datalog::del_rule(m_mc, *r2, true);
                     del_rule(r2, j);
                 }
 

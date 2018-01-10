@@ -16,27 +16,27 @@ Author:
 Notes:
 
 --*/
-#include"tactical.h"
-#include"goal2nlsat.h"
-#include"nlsat_solver.h"
-#include"model.h"
-#include"expr2var.h"
-#include"arith_decl_plugin.h"
-#include"ast_smt2_pp.h"
-#include"z3_exception.h"
-#include"algebraic_numbers.h"
-#include"ast_pp.h"
+#include "tactic/tactical.h"
+#include "nlsat/tactic/goal2nlsat.h"
+#include "nlsat/nlsat_solver.h"
+#include "model/model.h"
+#include "ast/expr2var.h"
+#include "ast/arith_decl_plugin.h"
+#include "ast/ast_smt2_pp.h"
+#include "util/z3_exception.h"
+#include "math/polynomial/algebraic_numbers.h"
+#include "ast/ast_pp.h"
 
 class nlsat_tactic : public tactic {
     struct expr_display_var_proc : public nlsat::display_var_proc {
         ast_manager & m;
         expr_ref_vector m_var2expr;
         expr_display_var_proc(ast_manager & _m):m(_m), m_var2expr(_m) {}
-        virtual void operator()(std::ostream & out, nlsat::var x) const { 
+        virtual std::ostream& operator()(std::ostream & out, nlsat::var x) const { 
             if (x < m_var2expr.size())
-                out << mk_ismt2_pp(m_var2expr.get(x), m); 
+                return out << mk_ismt2_pp(m_var2expr.get(x), m); 
             else
-                out << "x!" << x;
+                return out << "x!" << x;
         }
     };
 
@@ -51,7 +51,7 @@ class nlsat_tactic : public tactic {
             m(_m),
             m_params(p),
             m_display_var(_m),
-            m_solver(m.limit(), p) {
+            m_solver(m.limit(), p, false) {
         }
         
         void updt_params(params_ref const & p) {
@@ -147,6 +147,7 @@ class nlsat_tactic : public tactic {
             TRACE("nlsat", g->display(tout););
             expr2var  a2b(m);
             expr2var  t2x(m);
+            
             m_g2nl(*g, m_params, m_solver, a2b, t2x);
 
             m_display_var.m_var2expr.reset();
@@ -172,9 +173,18 @@ class nlsat_tactic : public tactic {
                 }
             }
             else {
-                // TODO: extract unsat core
-                g->assert_expr(m.mk_false(), 0, 0);
+                expr_dependency* lcore = 0;
+                if (g->unsat_core_enabled()) {
+                    vector<nlsat::assumption, false> assumptions;
+                    m_solver.get_core(assumptions);
+                    for (unsigned i = 0; i < assumptions.size(); ++i) {
+                        expr_dependency* d = static_cast<expr_dependency*>(assumptions[i]);
+                        lcore = m.mk_join(lcore, d);
+                    }
+                }
+                g->assert_expr(m.mk_false(), 0, lcore);
             }
+            
             g->inc_depth();
             result.push_back(g.get());
             TRACE("nlsat", g->display(tout););

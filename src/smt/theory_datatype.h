@@ -19,11 +19,11 @@ Revision History:
 #ifndef THEORY_DATATYPE_H_
 #define THEORY_DATATYPE_H_
 
-#include"smt_theory.h"
-#include"union_find.h"
-#include"theory_datatype_params.h"
-#include"datatype_decl_plugin.h"
-#include"datatype_factory.h"
+#include "smt/smt_theory.h"
+#include "util/union_find.h"
+#include "smt/params/theory_datatype_params.h"
+#include "ast/datatype_decl_plugin.h"
+#include "smt/proto_model/datatype_factory.h"
 
 namespace smt {
     
@@ -97,6 +97,7 @@ namespace smt {
         virtual void pop_scope_eh(unsigned num_scopes);
         virtual final_check_status final_check_eh();
         virtual void reset_eh();
+        virtual void restart_eh() { m_util.reset(); }
         virtual bool is_shared(theory_var v) const;
     public:
         theory_datatype(ast_manager & m, theory_datatype_params & p);

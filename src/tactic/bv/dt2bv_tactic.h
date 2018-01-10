@@ -19,7 +19,8 @@ Revision History:
 #ifndef DT2BV_TACTIC_H_
 #define DT2BV_TACTIC_H_
 
-#include"params.h"
+#include "util/params.h"
+#include "util/obj_hashtable.h"
 class ast_manager;
 class tactic;
 
