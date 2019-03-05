@@ -26,7 +26,7 @@ Implementation:
 
     1) Dealing with multiple quantifiers -> The options fixedpoint.xform.instantiate_arrays.nb_quantifier gives the number of quantifiers per array.
 
-    2) Inforcing the instantiation -> We suggest an option (enforce_instantiation) to enforce this abstraction. This transforms
+    2) Enforcing the instantiation -> We suggest an option (enforce_instantiation) to enforce this abstraction. This transforms
        P(a) into P(i, a[i]). This enforces the solver to limit the space search at the cost of imprecise results. This option
        corresponds to fixedpoint.xform.instantiate_arrays.enforce
 
@@ -70,7 +70,7 @@ Revision History:
 #define DL_MK_ARRAY_INSTANTIATION_H_
 
 
-#include "ast/factor_equivs.h"
+#include "ast/rewriter/factor_equivs.h"
 #include "muz/base/dl_rule_transformer.h"
 
 namespace datalog {

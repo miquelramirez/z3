@@ -27,8 +27,9 @@ Revision History:
 #include "ast/macros/quasi_macros.h"
 #include "smt/asserted_formulas.h"
 
-asserted_formulas::asserted_formulas(ast_manager & m, smt_params & p):
+asserted_formulas::asserted_formulas(ast_manager & m, smt_params & sp, params_ref const& p):
     m(m),
+    m_smt_params(sp),
     m_params(p),
     m_rewriter(m),
     m_substitution(m),
@@ -46,7 +47,6 @@ asserted_formulas::asserted_formulas(ast_manager & m, smt_params & p):
     m_refine_inj_axiom(*this),
     m_max_bv_sharing_fn(*this),
     m_elim_term_ite(*this),
-    m_pull_cheap_ite_trees(*this),
     m_pull_nested_quantifiers(*this),
     m_elim_bvs_from_quantifiers(*this),
     m_cheap_quant_fourier_motzkin(*this),
@@ -66,20 +66,20 @@ asserted_formulas::asserted_formulas(ast_manager & m, smt_params & p):
 }
 
 void asserted_formulas::setup() {
-    switch (m_params.m_lift_ite) {
+    switch (m_smt_params.m_lift_ite) {
     case LI_FULL:
-        m_params.m_ng_lift_ite = LI_NONE;
+        m_smt_params.m_ng_lift_ite = LI_NONE;
         break;
     case LI_CONSERVATIVE:
-        if (m_params.m_ng_lift_ite == LI_CONSERVATIVE)
-            m_params.m_ng_lift_ite = LI_NONE;
+        if (m_smt_params.m_ng_lift_ite == LI_CONSERVATIVE)
+            m_smt_params.m_ng_lift_ite = LI_NONE;
         break;
     default:
         break;
     }
 
-    if (m_params.m_relevancy_lvl == 0)
-        m_params.m_relevancy_lemma = false;
+    if (m_smt_params.m_relevancy_lvl == 0)
+        m_smt_params.m_relevancy_lemma = false;
 }
 
 
@@ -118,21 +118,24 @@ void asserted_formulas::push_assertion(expr * e, proof * pr, vector<justified_ex
     }
 }
 
+void asserted_formulas::updt_params(params_ref const& p) {
+    m_params.append(p);
+}
+
 void asserted_formulas::set_eliminate_and(bool flag) {
     if (flag == m_elim_and) return;
     m_elim_and = flag;
-    params_ref p;
-    p.set_bool("pull_cheap_ite", false);
-    p.set_bool("elim_and", flag);
-    p.set_bool("arith_ineq_lhs", true);
-    p.set_bool("sort_sums", true);
-    p.set_bool("rewrite_patterns", true);
-    p.set_bool("eq2ineq", m_params.m_arith_eq2ineq);
-    p.set_bool("gcd_rounding", true);
-    p.set_bool("expand_select_store", true);
-    p.set_bool("bv_sort_ac", true);
-    p.set_bool("som", true);
-    m_rewriter.updt_params(p);
+    if (m_smt_params.m_pull_cheap_ite) m_params.set_bool("pull_cheap_ite", true);
+    m_params.set_bool("elim_and", flag);
+    m_params.set_bool("arith_ineq_lhs", true);
+    m_params.set_bool("sort_sums", true);
+    m_params.set_bool("rewrite_patterns", true);
+    m_params.set_bool("eq2ineq", m_smt_params.m_arith_eq2ineq);
+    m_params.set_bool("gcd_rounding", true);
+    m_params.set_bool("expand_select_store", true);
+    m_params.set_bool("bv_sort_ac", true);
+    m_params.set_bool("som", true);
+    m_rewriter.updt_params(m_params);
     flush_cache();
 }
 
@@ -144,7 +147,7 @@ void asserted_formulas::assert_expr(expr * e, proof * _in_pr) {
     if (inconsistent())
         return;
 
-    if (m_params.m_preprocess) {
+    if (m_smt_params.m_preprocess) {
         TRACE("assert_expr_bug", tout << r << "\n";);
         set_eliminate_and(false); // do not eliminate and before nnf.
         m_rewriter(e, r, pr);
@@ -227,7 +230,7 @@ void asserted_formulas::reduce() {
         return;
     if (m_qhead == m_formulas.size())
         return;
-    if (!m_params.m_preprocess)
+    if (!m_smt_params.m_preprocess)
         return;
     if (m_macro_manager.has_macros())
         invoke(m_find_macros);
@@ -241,7 +244,6 @@ void asserted_formulas::reduce() {
     if (!invoke(m_nnf_cnf)) return;
     set_eliminate_and(true);
     if (!invoke(m_reduce_asserted_formulas)) return;
-    if (!invoke(m_pull_cheap_ite_trees)) return;
     if (!invoke(m_pull_nested_quantifiers)) return;
     if (!invoke(m_lift_ite)) return;
     if (!invoke(m_ng_lift_ite)) return;
@@ -332,6 +334,7 @@ void asserted_formulas::find_macros_core() {
     reduce_and_solve();
 }
 
+
 void asserted_formulas::apply_quasi_macros() {
     TRACE("before_quasi_macros", display(tout););
     vector<justified_expr> new_fmls;
@@ -417,7 +420,7 @@ void asserted_formulas::simplify_fmls::operator()() {
 
 
 void asserted_formulas::reduce_and_solve() {
-    IF_IVERBOSE(10, verbose_stream() << "(smt.reducing)\n";);
+    IF_VERBOSE(10, verbose_stream() << "(smt.reducing)\n";);
     flush_cache(); // collect garbage
     m_reduce_asserted_formulas();
 }
@@ -446,7 +449,7 @@ void asserted_formulas::propagate_values() {
         m_expr2depth.reset();
         m_scoped_substitution.push();
         unsigned prop = num_prop;
-        TRACE("propagate_values", tout << "before:\n"; display(tout););
+        TRACE("propagate_values", display(tout << "before:\n"););
         unsigned i  = m_qhead;
         unsigned sz = m_formulas.size();
         for (; i < sz; i++) {
@@ -479,15 +482,13 @@ unsigned asserted_formulas::propagate_values(unsigned i) {
     expr_ref new_n(m);
     proof_ref new_pr(m);
     m_rewriter(n, new_n, new_pr);
+    TRACE("propagate_values", tout << n << "\n" << new_n << "\n";);
     if (m.proofs_enabled()) {
         proof * pr  = m_formulas[i].get_proof();
         new_pr = m.mk_modus_ponens(pr, new_pr);
     }
     justified_expr j(m, new_n, new_pr);
     m_formulas[i] = j;
-    if (m_formulas[i].get_fml() != new_n) {
-        std::cout << "NOT updated\n";
-    }
     if (m.is_false(j.get_fml())) {
         m_inconsistent = true;
     }
@@ -497,7 +498,8 @@ unsigned asserted_formulas::propagate_values(unsigned i) {
 
 void asserted_formulas::update_substitution(expr* n, proof* pr) {
     expr* lhs, *rhs, *n1;
-    if (is_ground(n) && (m.is_eq(n, lhs, rhs) || m.is_iff(n, lhs, rhs))) {
+    proof_ref pr1(m);
+    if (is_ground(n) && m.is_eq(n, lhs, rhs)) {
         compute_depth(lhs);
         compute_depth(rhs);
         if (is_gt(lhs, rhs)) {
@@ -507,13 +509,13 @@ void asserted_formulas::update_substitution(expr* n, proof* pr) {
         }
         if (is_gt(rhs, lhs)) {
             TRACE("propagate_values", tout << "insert " << mk_pp(rhs, m) << " -> " << mk_pp(lhs, m) << "\n";);
-            m_scoped_substitution.insert(rhs, lhs, m.proofs_enabled() ? m.mk_symmetry(pr) : nullptr);
+            pr1 = m.proofs_enabled() ? m.mk_symmetry(pr) : nullptr;
+            m_scoped_substitution.insert(rhs, lhs, pr1);
             return;
         }
         TRACE("propagate_values", tout << "incompatible " << mk_pp(n, m) << "\n";);
     }
-    proof_ref pr1(m);
-    if (m.is_not(n, n1)) {		
+    if (m.is_not(n, n1)) {
         pr1 = m.proofs_enabled() ? m.mk_iff_false(pr) : nullptr;
         m_scoped_substitution.insert(n1, m.mk_false(), pr1);
     }
@@ -522,6 +524,7 @@ void asserted_formulas::update_substitution(expr* n, proof* pr) {
         m_scoped_substitution.insert(n, m.mk_true(), pr1);
     }
 }
+
 
 /**
    \brief implement a Knuth-Bendix ordering on expressions.
@@ -628,9 +631,9 @@ unsigned asserted_formulas::get_total_size() const {
     return r;
 }
 
+
 #ifdef Z3DEBUG
 void pp(asserted_formulas & f) {
     f.display(std::cout);
 }
 #endif
-

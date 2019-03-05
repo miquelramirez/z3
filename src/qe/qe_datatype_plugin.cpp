@@ -46,7 +46,7 @@ Copyright (c) 2015 Microsoft Corporation
 //   -> \/_i R_C(t_i) & phi[t_i/x]  \/ phi[false, true]
 // 
 //  Justification: 
-//  - We will asume that each of t_i, s_j are constructor terms.
+//  - We will assume that each of t_i, s_j are constructor terms.
 //  - We can assume that x \notin t_i, x \notin s_j, or otherwise use simplification.
 //  - We can assume that x occurs only in equalities or disequalities, or the recognizer, since 
 //    otherwise, we could simplify equalities, or QE does not apply.
@@ -261,7 +261,7 @@ namespace qe {
                 return false;
             }
             func_decl* c = a->get_decl();
-            func_decl* r = m_util.get_constructor_recognizer(c);
+            func_decl_ref r(m_util.get_constructor_is(c), m);
             ptr_vector<func_decl> const & acc = *m_util.get_constructor_accessors(c);
             SASSERT(acc.size() == a->get_num_args());
             //
@@ -380,7 +380,7 @@ namespace qe {
             }
             func_decl* c = l->get_decl();
             ptr_vector<func_decl> const& acc = *m_util.get_constructor_accessors(c);
-            func_decl* rec = m_util.get_constructor_recognizer(c);
+            func_decl* rec = m_util.get_constructor_is(c);
             expr_ref_vector conj(m);
             conj.push_back(m.mk_app(rec, r));
             for (unsigned i = 0; i < acc.size(); ++i) {
@@ -627,7 +627,7 @@ namespace qe {
             // 
             if (!has_recognizer(x, fml, r, c)) {
                 c = m_datatype_util.get_datatype_constructors(s)->get(vl.get_unsigned());
-                r = m_datatype_util.get_constructor_recognizer(c);
+                r = m_datatype_util.get_constructor_is(c);
                 app* is_c = m.mk_app(r, x);                
                 // assert v => r(x)            
                 m_ctx.add_constraint(true, is_c);
@@ -674,7 +674,7 @@ namespace qe {
             // 
             if (!has_recognizer(x, fml, r, c)) {
                 c = m_datatype_util.get_datatype_constructors(s)->get(vl.get_unsigned());
-                r = m_datatype_util.get_constructor_recognizer(c);
+                r = m_datatype_util.get_constructor_is(c);
                 app* is_c = m.mk_app(r, x);                
                 fml = m.mk_and(is_c, fml);
                 app_ref fresh_x(m.mk_fresh_const("x", s), m);
@@ -775,7 +775,7 @@ namespace qe {
             }
             
             c = m_datatype_util.get_datatype_constructors(s)->get(vl.get_unsigned());
-            r = m_datatype_util.get_constructor_recognizer(c);
+            r = m_datatype_util.get_constructor_is(c);
             app* is_c = m.mk_app(r, x);
             
             // assert v => r(x)

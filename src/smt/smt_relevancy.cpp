@@ -129,7 +129,7 @@ namespace smt {
     struct relevancy_propagator_imp : public relevancy_propagator {
         unsigned                       m_qhead;
         expr_ref_vector                m_relevant_exprs; 
-        obj_hashtable<expr>            m_is_relevant;
+        uint_set                       m_is_relevant;
         typedef list<relevancy_eh *>   relevancy_ehs;
         obj_map<expr, relevancy_ehs *> m_relevant_ehs;
         obj_map<expr, relevancy_ehs *> m_watches[2];
@@ -242,7 +242,7 @@ namespace smt {
             }
         }
         
-        bool is_relevant_core(expr * n) const { return m_is_relevant.contains(n); }
+        bool is_relevant_core(expr * n) const { return m_is_relevant.contains(n->get_id()); }
         
         bool is_relevant(expr * n) const override {
             return !enabled() || is_relevant_core(n);
@@ -275,7 +275,7 @@ namespace smt {
             while (i != old_lim) {
                 --i;
                 expr * n = m_relevant_exprs.get(i);
-                m_is_relevant.erase(n);
+                m_is_relevant.remove(n->get_id());
                 TRACE("propagate_relevancy", tout << "unmarking:\n" << mk_ismt2_pp(n, get_manager()) << "\n";);
             }
             m_relevant_exprs.shrink(old_lim);
@@ -303,7 +303,7 @@ namespace smt {
         }
 
         void set_relevant(expr * n) {
-            m_is_relevant.insert(n);
+            m_is_relevant.insert(n->get_id());
             m_relevant_exprs.push_back(n);
             m_context.relevant_eh(n);
         }
@@ -527,7 +527,7 @@ namespace smt {
         }
 
 #ifdef Z3DEBUG
-        bool check_relevancy_app(app * n) const {
+        bool check_relevancy_app(app * n) const  {
             SASSERT(is_relevant(n));
             unsigned num_args = n->get_num_args();
             for (unsigned i = 0; i < num_args; i++) {
@@ -537,7 +537,7 @@ namespace smt {
             return true;
         }
         
-        virtual bool check_relevancy_or(app * n, bool root) const {
+        bool check_relevancy_or(app * n, bool root) const override {
             lbool val    = root ? l_true : m_context.find_assignment(n);
             if (val == l_false)
                 return check_relevancy_app(n);
@@ -600,7 +600,7 @@ namespace smt {
             return true;
         }
         
-        bool check_relevancy(expr_ref_vector const & v) const {
+        bool check_relevancy(expr_ref_vector const & v) const override {
             SASSERT(!can_propagate());
             ast_manager & m = get_manager();
             unsigned sz = v.size();
